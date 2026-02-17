@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { DEFAULT_EXPENSE_CATS, DEFAULT_INCOME_CATS, MONTHS, formatBRL, genId, getCategoryByDesc } from '@/lib/constants';
+import { DEFAULT_EXPENSE_CATS, DEFAULT_INCOME_CATS, MONTHS, MONTHS_FULL, formatBRL, genId, getCategoryByDesc, getCatBudget, getCatBudgetRange } from '@/lib/constants';
 import { loadData, saveData } from '@/lib/storage';
 import { computeForecast } from '@/lib/forecast';
 import { parseImportFile, detectDuplicates } from '@/lib/importParser';
@@ -97,6 +97,11 @@ export default function FinFlowApp() {
   const [scanResult, setScanResult] = useState(null);
   const [showAddTx, setShowAddTx] = useState(false);
   const [forecastMonths, setForecastMonths] = useState(6);
+  const [viewPeriod, setViewPeriod] = useState('monthly'); // monthly | quarterly | semiannual | annual
+  const [viewMonth, setViewMonth] = useState(cm + 1); // 1-12
+  const [viewYear, setViewYear] = useState(cy);
+  const [viewQuarter, setViewQuarter] = useState(Math.ceil((cm + 1) / 3)); // 1-4
+  const [budgetTab, setBudgetTab] = useState('expense'); // expense | income
   const [importStaging, setImportStaging] = useState([]);
   const [importHistory, setImportHistory] = useState([]);
   const [importing, setImporting] = useState(false);
@@ -150,11 +155,71 @@ export default function FinFlowApp() {
   const accounts4forecast = [{ balance: bankTotal }];
   const fd = useMemo(() => computeForecast(transactions, accounts4forecast), [transactions, bankTotal]);
 
-  const thisMonthTx = transactions.filter(tx => { const d = new Date(tx.date); return d.getMonth() === cm && d.getFullYear() === cy; });
-  const thisMonthIncome = thisMonthTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const thisMonthExpense = thisMonthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0);
+  // ─── PERIOD HELPERS ───
+  const getViewMonths = () => {
+    switch (viewPeriod) {
+      case 'monthly': return [{ month: viewMonth, year: viewYear }];
+      case 'quarterly': {
+        const start = (viewQuarter - 1) * 3 + 1;
+        return [1,2,3].map(i => ({ month: start + i - 1, year: viewYear }));
+      }
+      case 'semiannual': {
+        const start = viewMonth <= 6 ? 1 : 7;
+        return [0,1,2,3,4,5].map(i => ({ month: start + i, year: viewYear }));
+      }
+      case 'annual': return [1,2,3,4,5,6,7,8,9,10,11,12].map(m => ({ month: m, year: viewYear }));
+      default: return [{ month: viewMonth, year: viewYear }];
+    }
+  };
+  const periodMonths = getViewMonths();
+
+  const filterByPeriod = (txs) => {
+    return txs.filter(tx => {
+      const d = new Date(tx.date);
+      const txMonth = d.getMonth() + 1;
+      const txYear = d.getFullYear();
+      return periodMonths.some(pm => pm.month === txMonth && pm.year === txYear);
+    });
+  };
+
+  const periodLabel = () => {
+    switch (viewPeriod) {
+      case 'monthly': return `${MONTHS_FULL[viewMonth - 1]} ${viewYear}`;
+      case 'quarterly': return `${viewQuarter}º Trimestre ${viewYear}`;
+      case 'semiannual': return `${viewMonth <= 6 ? '1º' : '2º'} Semestre ${viewYear}`;
+      case 'annual': return `Ano ${viewYear}`;
+      default: return '';
+    }
+  };
+
+  const periodPrev = () => {
+    switch (viewPeriod) {
+      case 'monthly': { const m = viewMonth - 1; if (m < 1) { setViewMonth(12); setViewYear(viewYear - 1); } else setViewMonth(m); break; }
+      case 'quarterly': { const q = viewQuarter - 1; if (q < 1) { setViewQuarter(4); setViewYear(viewYear - 1); } else setViewQuarter(q); break; }
+      case 'semiannual': { if (viewMonth <= 6) { setViewMonth(7); setViewYear(viewYear - 1); } else setViewMonth(1); break; }
+      case 'annual': setViewYear(viewYear - 1); break;
+    }
+  };
+
+  const periodNext = () => {
+    switch (viewPeriod) {
+      case 'monthly': { const m = viewMonth + 1; if (m > 12) { setViewMonth(1); setViewYear(viewYear + 1); } else setViewMonth(m); break; }
+      case 'quarterly': { const q = viewQuarter + 1; if (q > 4) { setViewQuarter(1); setViewYear(viewYear + 1); } else setViewQuarter(q); break; }
+      case 'semiannual': { if (viewMonth >= 7) { setViewMonth(1); setViewYear(viewYear + 1); } else setViewMonth(7); break; }
+      case 'annual': setViewYear(viewYear + 1); break;
+    }
+  };
+
+  // ─── PERIOD-FILTERED DATA ───
+  const periodTx = filterByPeriod(transactions);
+  const periodIncome = periodTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const periodExpense = periodTx.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0);
+
   const catExpenses = {};
-  thisMonthTx.filter(t => t.type === 'expense').forEach(t => { if (!catExpenses[t.category]) catExpenses[t.category] = 0; catExpenses[t.category] += Math.abs(t.amount); });
+  periodTx.filter(t => t.type === 'expense').forEach(t => { if (!catExpenses[t.category]) catExpenses[t.category] = 0; catExpenses[t.category] += Math.abs(t.amount); });
+
+  const catIncomes = {};
+  periodTx.filter(t => t.type === 'income').forEach(t => { if (!catIncomes[t.category]) catIncomes[t.category] = 0; catIncomes[t.category] += t.amount; });
 
   const getCat = (id) => expenseCats.find(c => c.id === id) || incomeCats.find(c => c.id === id) || { name: id, icon: '📦', color: '#B388FF' };
 
@@ -276,7 +341,10 @@ export default function FinFlowApp() {
 
 
         {/* ══════ DASHBOARD ══════ */}
-        {page === 'dashboard' && (
+        {page === 'dashboard' && (() => {
+          const budgetExpTotal = expenseCats.reduce((s, c) => s + getCatBudgetRange(c, periodMonths), 0);
+          const budgetIncTotal = incomeCats.reduce((s, c) => s + getCatBudgetRange(c, periodMonths), 0);
+          return (
           <div className="stagger">
             {hasSampleData && (
               <div className="glass" style={{ marginBottom: 20, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, borderColor: 'rgba(255,215,64,0.3)', background: 'rgba(255,215,64,0.05)' }}>
@@ -285,19 +353,33 @@ export default function FinFlowApp() {
                 <button className="btn-danger" onClick={clearAllData}>🗑 Limpar</button>
               </div>
             )}
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Dashboard</h1>
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
               </div>
               <button className="btn-primary" onClick={() => { setShowAddTx(true); setPage('transactions'); }}>+ Lançamento</button>
             </div>
+            {/* ── Period Selector ── */}
+            <div className="glass" style={{ padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[{id:'monthly',l:'Mensal'},{id:'quarterly',l:'Trimestral'},{id:'semiannual',l:'Semestral'},{id:'annual',l:'Anual'}].map(p=>(
+                  <button key={p.id} className={`chip ${viewPeriod===p.id?'active':''}`} onClick={()=>setViewPeriod(p.id)} style={{ fontSize: 11, padding: '5px 12px' }}>{p.l}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={periodPrev} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18, padding: '2px 6px' }}>‹</button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', minWidth: 160, textAlign: 'center' }}>{periodLabel()}</span>
+                <button onClick={periodNext} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18, padding: '2px 6px' }}>›</button>
+              </div>
+            </div>
+            {/* KPIs */}
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
               {[
                 { label: 'Patrimônio Total', value: formatBRL(totalPatrimonio), color: '#B24DFF', sub: `Bancos: ${formatBRL(bankTotal)}` },
-                { label: 'Receita do Mês', value: formatBRL(thisMonthIncome), color: '#69F0AE', sub: `${bankAccounts.length} contas` },
-                { label: 'Despesa do Mês', value: formatBRL(thisMonthExpense), color: '#FF6B9D', sub: cardDebt > 0 ? `Cartões: ${formatBRL(cardDebt)}` : '' },
-                { label: 'Saldo do Mês', value: formatBRL(thisMonthIncome - thisMonthExpense), color: thisMonthIncome - thisMonthExpense >= 0 ? '#69F0AE' : '#FF6B9D', sub: `Economia: ${thisMonthIncome > 0 ? ((1 - thisMonthExpense / thisMonthIncome) * 100).toFixed(1) : 0}%` },
+                { label: 'Receita', value: formatBRL(periodIncome), color: '#69F0AE', sub: budgetIncTotal > 0 ? `Previsto: ${formatBRL(budgetIncTotal)}` : `${bankAccounts.length} contas` },
+                { label: 'Despesa', value: formatBRL(periodExpense), color: '#FF6B9D', sub: budgetExpTotal > 0 ? `Previsto: ${formatBRL(budgetExpTotal)}` : (cardDebt > 0 ? `Cartões: ${formatBRL(cardDebt)}` : '') },
+                { label: 'Saldo', value: formatBRL(periodIncome - periodExpense), color: periodIncome - periodExpense >= 0 ? '#69F0AE' : '#FF6B9D', sub: `Economia: ${periodIncome > 0 ? ((1 - periodExpense / periodIncome) * 100).toFixed(1) : 0}%` },
               ].map((k, i) => (
                 <div key={i} className="glass hoverable" style={{ position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${k.color},transparent)`, opacity: 0.6 }} />
@@ -307,59 +389,86 @@ export default function FinFlowApp() {
                 </div>
               ))}
             </div>
-            {/* Quick accounts overview */}
+            {/* Quick accounts */}
             {bankAccounts.length > 0 && (
               <div style={{ display: 'flex', gap: 12, marginBottom: 24, overflowX: 'auto' }}>
                 {bankAccounts.map(a => (
                   <div key={a.id} className="glass" style={{ minWidth: 180, padding: '14px 18px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span style={{ fontSize: 18 }}>{a.icon}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{a.name}</span>
-                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 18 }}>{a.icon}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{a.name}</span></div>
                     <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: a.balance >= 0 ? '#69F0AE' : '#FF6B9D' }}>{formatBRL(a.balance)}</div>
                   </div>
                 ))}
                 {creditCards.map(c => (
                   <div key={c.id} className="glass" style={{ minWidth: 180, padding: '14px 18px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span style={{ fontSize: 18 }}>{c.icon}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{c.name}</span>
-                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 18 }}>{c.icon}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{c.name}</span></div>
                     <div className="mono" style={{ fontSize: 14, color: '#FF6B9D' }}>Fatura: {formatBRL(c.used || 0)}</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Limite: {formatBRL(c.limit)}</div>
                   </div>
                 ))}
               </div>
             )}
+            {/* Expense vs Budget + Income vs Budget */}
             <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
               <div className="glass">
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>Evolução Mensal</h3>
-                <div style={{ display: 'flex', gap: 20 }}>
-                  {[{ label: 'Receitas', data: fd.monthlyData.slice(-6).map(([, d]) => d.income), max: fd.avgIncome * 1.4, color: '#69F0AE' },
-                    { label: 'Despesas', data: fd.monthlyData.slice(-6).map(([, d]) => d.expense), max: fd.avgExpense * 1.4, color: '#FF6B9D' }].map((s, si) => (
-                    <div key={si} style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>{s.label}</div>
-                      <div style={{ display: 'flex', alignItems: 'end', gap: 4, height: 90 }}>
-                        {s.data.map((v, i) => (<div key={i} style={{ flex: 1, background: `linear-gradient(180deg,${s.color}${i === s.data.length - 1 ? '' : '66'},${s.color}11)`, height: `${Math.max(8, (v / (s.max || 1)) * 100)}%`, borderRadius: 6, transition: 'height 0.8s cubic-bezier(0.16,1,0.3,1)' }} />))}
-                      </div>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>📉 Despesas vs Orçamento</h3>
+                {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).sort((a, b) => (catExpenses[b.id] || 0) - (catExpenses[a.id] || 0)).slice(0, 6).map(cat => {
+                  const spent = catExpenses[cat.id] || 0;
+                  const budget = getCatBudgetRange(cat, periodMonths);
+                  const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : (spent > 0 ? 100 : 0);
+                  const over = budget > 0 && spent > budget;
+                  return (<div key={cat.id} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} {cat.budgetType === 'annual' ? <span style={{ fontSize: 10, color: '#FFD740', marginLeft: 4 }}>anual</span> : ''}</span>
+                      <span className="mono" style={{ fontSize: 12 }}><span style={{ color: over ? '#FF6B9D' : 'rgba(255,255,255,0.6)' }}>{formatBRL(spent)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                     </div>
-                  ))}
-                </div>
+                    <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: over ? 'linear-gradient(90deg,#FF6B9D88,#FF6B9D)' : 'linear-gradient(90deg,#B24DFF88,#B24DFF)', borderRadius: 6, transition: 'width 1s' }} />
+                    </div>
+                  </div>);
+                })}
+                {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
               </div>
               <div className="glass">
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>Gastos por Categoria</h3>
-                {expenseCats.filter(c => catExpenses[c.id]).sort((a, b) => (catExpenses[b.id] || 0) - (catExpenses[a.id] || 0)).slice(0, 5).map(cat => {
-                  const spent = catExpenses[cat.id] || 0, budget = cat.budget || 1000, pct = Math.min((spent / budget) * 100, 100);
-                  return (<div key={cat.id} style={{ marginBottom: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>{cat.icon} {cat.name}</span><span className="mono" style={{ fontSize: 12, color: spent > budget ? '#FF6B9D' : 'rgba(255,255,255,0.5)' }}>{formatBRL(spent)}</span></div><div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 6, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg,#B24DFF88,#B24DFF)`, borderRadius: 6, transition: 'width 1s' }} /></div></div>);
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>📈 Receitas vs Previsão</h3>
+                {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).map(cat => {
+                  const received = catIncomes[cat.id] || 0;
+                  const budget = getCatBudgetRange(cat, periodMonths);
+                  const pct = budget > 0 ? Math.min((received / budget) * 100, 100) : (received > 0 ? 100 : 0);
+                  return (<div key={cat.id} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} {cat.budgetType === 'annual' ? <span style={{ fontSize: 10, color: '#FFD740', marginLeft: 4 }}>anual</span> : ''}</span>
+                      <span className="mono" style={{ fontSize: 12 }}><span style={{ color: '#69F0AE' }}>{formatBRL(received)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
+                    </div>
+                    <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#69F0AE88,#69F0AE)', borderRadius: 6, transition: 'width 1s' }} />
+                    </div>
+                  </div>);
                 })}
+                {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
               </div>
             </div>
+            {/* Evolution chart */}
+            <div className="glass" style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>Evolução Mensal</h3>
+              <div style={{ display: 'flex', gap: 20 }}>
+                {[{ label: 'Receitas', data: fd.monthlyData.slice(-6).map(([, d]) => d.income), max: fd.avgIncome * 1.4, color: '#69F0AE' },
+                  { label: 'Despesas', data: fd.monthlyData.slice(-6).map(([, d]) => d.expense), max: fd.avgExpense * 1.4, color: '#FF6B9D' }].map((s, si) => (
+                  <div key={si} style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>{s.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'end', gap: 4, height: 90 }}>
+                      {s.data.map((v, i) => (<div key={i} style={{ flex: 1, background: `linear-gradient(180deg,${s.color}${i === s.data.length - 1 ? '' : '66'},${s.color}11)`, height: `${Math.max(8, (v / (s.max || 1)) * 100)}%`, borderRadius: 6, transition: 'height 0.8s cubic-bezier(0.16,1,0.3,1)' }} />))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Recent transactions */}
             <div className="glass">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>Últimos Lançamentos</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>Lançamentos do Período</h3>
                 <button className="chip" onClick={() => setPage('transactions')}>Ver todos →</button>
               </div>
-              {transactions.slice(0, 7).map(tx => { const cat = getCat(tx.category); return (
+              {periodTx.slice(0, 7).map(tx => { const cat = getCat(tx.category); return (
                 <div key={tx.id} className="tx-row">
                   <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : cat?.icon || '📦'}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -369,9 +478,11 @@ export default function FinFlowApp() {
                   <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
                 </div>
               ); })}
+              {periodTx.length === 0 && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.25)', padding: 20 }}>Nenhum lançamento no período</p>}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ══════ TRANSACTIONS ══════ */}
         {page === 'transactions' && (
@@ -521,27 +632,127 @@ export default function FinFlowApp() {
         )}
 
         {/* ══════ BUDGET ══════ */}
-        {page === 'budget' && (
+        {page === 'budget' && (() => {
+          const budgetExpTotal = expenseCats.reduce((s, c) => s + getCatBudgetRange(c, periodMonths), 0);
+          const budgetIncTotal = incomeCats.reduce((s, c) => s + getCatBudgetRange(c, periodMonths), 0);
+          return (
           <div style={{ animation: 'fadeIn 0.4s ease' }}>
-            <div style={{ marginBottom: 28 }}><h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Orçamento</h1><p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{MONTHS[cm]} {cy}</p></div>
-            <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 16 }}>
-              {expenseCats.map(cat => {
-                const spent = catExpenses[cat.id] || 0, pct = cat.budget ? Math.min((spent / cat.budget) * 100, 100) : 0;
-                return (
-                  <div key={cat.id} className="glass hoverable" style={{ textAlign: 'center', padding: 24 }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative' }}>
-                      <GlassRing value={spent} max={cat.budget || 1000} size={80} />
-                      <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 22 }}>{cat.icon}</span>
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>{cat.name}</div>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: spent > (cat.budget || Infinity) ? '#FF6B9D' : '#69F0AE' }}>{formatBRL(spent)}</div>
-                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>de {formatBRL(cat.budget)} ({pct.toFixed(0)}%)</div>
-                  </div>
-                );
-              })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Orçamento</h1>
             </div>
+            {/* Period Selector */}
+            <div className="glass" style={{ padding: '12px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[{id:'monthly',l:'Mensal'},{id:'quarterly',l:'Trimestral'},{id:'semiannual',l:'Semestral'},{id:'annual',l:'Anual'}].map(p=>(
+                  <button key={p.id} className={`chip ${viewPeriod===p.id?'active':''}`} onClick={()=>setViewPeriod(p.id)} style={{ fontSize: 11, padding: '5px 12px' }}>{p.l}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={periodPrev} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18, padding: '2px 6px' }}>‹</button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', minWidth: 160, textAlign: 'center' }}>{periodLabel()}</span>
+                <button onClick={periodNext} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18, padding: '2px 6px' }}>›</button>
+              </div>
+            </div>
+            {/* Summary cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
+              {[
+                { l: 'Orçamento Despesas', v: budgetExpTotal, c: '#FF6B9D', i: '📉' },
+                { l: 'Realizado Despesas', v: periodExpense, c: periodExpense > budgetExpTotal && budgetExpTotal > 0 ? '#FF6B9D' : '#B24DFF', i: '💸' },
+                { l: 'Previsão Receitas', v: budgetIncTotal, c: '#69F0AE', i: '📈' },
+                { l: 'Realizado Receitas', v: periodIncome, c: '#69F0AE', i: '💰' },
+              ].map((k, i) => (
+                <div key={i} className="glass" style={{ textAlign: 'center', padding: 16 }}>
+                  <div style={{ fontSize: 18, marginBottom: 6 }}>{k.i}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{k.l}</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: k.c }}>{formatBRL(k.v)}</div>
+                </div>
+              ))}
+            </div>
+            {/* Expense / Income tabs */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <button className={`chip ${budgetTab==='expense'?'active':''}`} onClick={()=>setBudgetTab('expense')}>📉 Despesas</button>
+              <button className={`chip ${budgetTab==='income'?'active':''}`} onClick={()=>setBudgetTab('income')}>📈 Receitas</button>
+            </div>
+
+            {budgetTab === 'expense' && (
+              <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 16 }}>
+                {expenseCats.map(cat => {
+                  const spent = catExpenses[cat.id] || 0;
+                  const budget = getCatBudgetRange(cat, periodMonths);
+                  const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : (spent > 0 ? 100 : 0);
+                  const over = budget > 0 && spent > budget;
+                  return (
+                    <div key={cat.id} className="glass hoverable" style={{ textAlign: 'center', padding: 24, borderColor: over ? 'rgba(255,107,157,0.25)' : undefined, background: over ? 'rgba(255,107,157,0.03)' : undefined }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative' }}>
+                        <GlassRing value={spent} max={budget || spent || 1} size={80} color={over ? '#FF6B9D' : '#B24DFF'} />
+                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 22 }}>{cat.icon}</span>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
+                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Orçamento anual' : '🔁 Orçamento mensal'}</div>
+                      <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: over ? '#FF6B9D' : '#69F0AE' }}>{formatBRL(spent)}</div>
+                      {budget > 0 ? (
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>de {formatBRL(budget)} ({pct.toFixed(0)}%)</div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>sem orçamento definido</div>
+                      )}
+                      {over && <div style={{ fontSize: 11, color: '#FF6B9D', marginTop: 6, fontWeight: 600 }}>⚠ Estourou {formatBRL(spent - budget)}</div>}
+                      {/* Monthly breakdown for annual budget in annual/quarterly view */}
+                      {cat.budgetType === 'annual' && viewPeriod !== 'monthly' && periodMonths.length > 1 && budget > 0 && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 10 }}>
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {periodMonths.map(pm => {
+                              const mb = getCatBudget(cat, pm.month);
+                              return <span key={pm.month} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: mb > 0 ? 'rgba(178,77,255,0.1)' : 'rgba(255,255,255,0.02)', color: mb > 0 ? '#B24DFF' : 'rgba(255,255,255,0.15)' }}>{MONTHS[pm.month - 1]}: {mb > 0 ? formatBRL(mb) : '—'}</span>;
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {budgetTab === 'income' && (
+              <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 16 }}>
+                {incomeCats.map(cat => {
+                  const received = catIncomes[cat.id] || 0;
+                  const budget = getCatBudgetRange(cat, periodMonths);
+                  const pct = budget > 0 ? Math.min((received / budget) * 100, 100) : (received > 0 ? 100 : 0);
+                  const under = budget > 0 && received < budget * 0.8;
+                  return (
+                    <div key={cat.id} className="glass hoverable" style={{ textAlign: 'center', padding: 24 }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative' }}>
+                        <GlassRing value={received} max={budget || received || 1} size={80} color="#69F0AE" />
+                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 22 }}>{cat.icon}</span>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
+                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Previsão anual' : '🔁 Previsão mensal'}</div>
+                      <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: '#69F0AE' }}>{formatBRL(received)}</div>
+                      {budget > 0 ? (
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>de {formatBRL(budget)} ({pct.toFixed(0)}%)</div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>sem previsão definida</div>
+                      )}
+                      {under && budget > 0 && <div style={{ fontSize: 11, color: '#FFD740', marginTop: 6 }}>Faltam {formatBRL(budget - received)}</div>}
+                      {cat.budgetType === 'annual' && viewPeriod !== 'monthly' && periodMonths.length > 1 && budget > 0 && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 10 }}>
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {periodMonths.map(pm => {
+                              const mb = getCatBudget(cat, pm.month);
+                              return <span key={pm.month} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: mb > 0 ? 'rgba(105,240,174,0.1)' : 'rgba(255,255,255,0.02)', color: mb > 0 ? '#69F0AE' : 'rgba(255,255,255,0.15)' }}>{MONTHS[pm.month - 1]}: {mb > 0 ? formatBRL(mb) : '—'}</span>;
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══════ FORECAST ══════ */}
         {page === 'forecast' && (
@@ -845,14 +1056,14 @@ export default function FinFlowApp() {
                 <div className="glass" style={{ marginBottom: 20 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600 }}>📉 Categorias de Despesa</h3>
-                    <button className="btn-primary" onClick={() => setEditModal({ type: 'expense_cat', data: { id: '', name: '', icon: '📦', budget: '' } })}>+ Nova</button>
+                    <button className="btn-primary" onClick={() => setEditModal({ type: 'expense_cat', data: { id: '', name: '', icon: '📦', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
                     {expenseCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'expense_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 20 }}>{cat.icon}</span>
-                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Orçamento: {formatBRL(cat.budget)}</div></div>
+                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : `🔁 ${formatBRL(cat.monthlyBudget)}/mês`}</div></div>
                         </div>
                       </div>
                     ))}
@@ -862,14 +1073,14 @@ export default function FinFlowApp() {
                 <div className="glass">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600 }}>📈 Categorias de Receita</h3>
-                    <button className="btn-primary" onClick={() => setEditModal({ type: 'income_cat', data: { id: '', name: '', icon: '💰' } })}>+ Nova</button>
+                    <button className="btn-primary" onClick={() => setEditModal({ type: 'income_cat', data: { id: '', name: '', icon: '💰', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
                     {incomeCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'income_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 20 }}>{cat.icon}</span>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div>
+                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : (cat.monthlyBudget ? `🔁 ${formatBRL(cat.monthlyBudget)}/mês` : 'Sem previsão')}</div></div>
                         </div>
                       </div>
                     ))}
@@ -1011,8 +1222,9 @@ export default function FinFlowApp() {
         {editModal?.type === 'expense_cat' && (() => {
           const [d, setD] = [editModal.data, (fn) => setEditModal(prev => ({ ...prev, data: typeof fn === 'function' ? fn(prev.data) : fn }))];
           const isNew = !d.id;
+          const bType = d.budgetType || 'monthly';
           const save = () => {
-            const item = { ...d, id: d.id || d.name.toLowerCase().replace(/[^a-z0-9]/g, '_'), budget: parseFloat(d.budget) || 0 };
+            const item = { ...d, id: d.id || d.name.toLowerCase().replace(/[^a-z0-9]/g, '_'), monthlyBudget: parseFloat(d.monthlyBudget) || 0, budgetType: bType, annualBudget: d.annualBudget || {} };
             if (!item.name) { notify('Nome obrigatório', 'error'); return; }
             if (isNew) setExpenseCats(prev => [...prev, item]);
             else setExpenseCats(prev => prev.map(c => c.id === item.id ? item : c));
@@ -1025,7 +1237,40 @@ export default function FinFlowApp() {
                 <button onClick={() => setShowIconPicker({ value: d.icon, onChange: (v) => setD(p => ({ ...p, icon: v })) })} style={{ width: 56, height: 56, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.icon}</button>
                 <input className="glass-input" placeholder="Nome da categoria" value={d.name} onChange={e => setD(p => ({ ...p, name: e.target.value }))} style={{ flex: 1 }} />
               </div>
-              <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Orçamento Mensal (R$)</label><input className="glass-input" type="number" placeholder="1000" value={d.budget} onChange={e => setD(p => ({ ...p, budget: e.target.value }))} /></div>
+              {/* Budget type selector */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Tipo de Orçamento</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <button onClick={() => setD(p => ({ ...p, budgetType: 'monthly' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'monthly' ? '1px solid #B24DFF' : '1px solid rgba(255,255,255,0.08)', background: bType === 'monthly' ? 'rgba(178,77,255,0.12)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>🔁 Mensal Fixo</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Mesmo valor todo mês</div>
+                  </button>
+                  <button onClick={() => setD(p => ({ ...p, budgetType: 'annual' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'annual' ? '1px solid #FFD740' : '1px solid rgba(255,255,255,0.08)', background: bType === 'annual' ? 'rgba(255,215,64,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>📅 Anual Variável</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personalizar por mês</div>
+                  </button>
+                </div>
+              </div>
+              {bType === 'monthly' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Orçamento Mensal (R$)</label>
+                  <input className="glass-input" type="number" placeholder="1000" value={d.monthlyBudget || ''} onChange={e => setD(p => ({ ...p, monthlyBudget: e.target.value }))} />
+                </div>
+              )}
+              {bType === 'annual' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Orçamento por Mês (R$)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                    {MONTHS_FULL.map((m, i) => (
+                      <div key={i}>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 2 }}>{MONTHS[i]}</label>
+                        <input className="glass-input" type="number" placeholder="0" style={{ padding: '8px 10px', fontSize: 12 }} value={(d.annualBudget || {})[i + 1] || ''} onChange={e => setD(p => ({ ...p, annualBudget: { ...(p.annualBudget || {}), [i + 1]: parseFloat(e.target.value) || 0 } }))} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Total anual: <span className="mono" style={{ color: '#B24DFF' }}>{formatBRL(Object.values(d.annualBudget || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0))}</span></div>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12 }}>
                 <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
                 {!isNew && <button className="btn-danger" onClick={remove}>🗑</button>}
@@ -1037,8 +1282,9 @@ export default function FinFlowApp() {
         {editModal?.type === 'income_cat' && (() => {
           const [d, setD] = [editModal.data, (fn) => setEditModal(prev => ({ ...prev, data: typeof fn === 'function' ? fn(prev.data) : fn }))];
           const isNew = !d.id;
+          const bType = d.budgetType || 'monthly';
           const save = () => {
-            const item = { ...d, id: d.id || d.name.toLowerCase().replace(/[^a-z0-9]/g, '_') };
+            const item = { ...d, id: d.id || d.name.toLowerCase().replace(/[^a-z0-9]/g, '_'), monthlyBudget: parseFloat(d.monthlyBudget) || 0, budgetType: bType, annualBudget: d.annualBudget || {} };
             if (!item.name) { notify('Nome obrigatório', 'error'); return; }
             if (isNew) setIncomeCats(prev => [...prev, item]);
             else setIncomeCats(prev => prev.map(c => c.id === item.id ? item : c));
@@ -1051,6 +1297,40 @@ export default function FinFlowApp() {
                 <button onClick={() => setShowIconPicker({ value: d.icon, onChange: (v) => setD(p => ({ ...p, icon: v })) })} style={{ width: 56, height: 56, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.icon}</button>
                 <input className="glass-input" placeholder="Nome da categoria" value={d.name} onChange={e => setD(p => ({ ...p, name: e.target.value }))} style={{ flex: 1 }} />
               </div>
+              {/* Budget type selector */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Tipo de Previsão</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <button onClick={() => setD(p => ({ ...p, budgetType: 'monthly' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'monthly' ? '1px solid #69F0AE' : '1px solid rgba(255,255,255,0.08)', background: bType === 'monthly' ? 'rgba(105,240,174,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>🔁 Mensal Fixo</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Mesmo valor todo mês</div>
+                  </button>
+                  <button onClick={() => setD(p => ({ ...p, budgetType: 'annual' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'annual' ? '1px solid #FFD740' : '1px solid rgba(255,255,255,0.08)', background: bType === 'annual' ? 'rgba(255,215,64,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>📅 Anual Variável</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personalizar por mês</div>
+                  </button>
+                </div>
+              </div>
+              {bType === 'monthly' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Previsão Mensal (R$)</label>
+                  <input className="glass-input" type="number" placeholder="12000" value={d.monthlyBudget || ''} onChange={e => setD(p => ({ ...p, monthlyBudget: e.target.value }))} />
+                </div>
+              )}
+              {bType === 'annual' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Previsão por Mês (R$)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                    {MONTHS_FULL.map((m, i) => (
+                      <div key={i}>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 2 }}>{MONTHS[i]}</label>
+                        <input className="glass-input" type="number" placeholder="0" style={{ padding: '8px 10px', fontSize: 12 }} value={(d.annualBudget || {})[i + 1] || ''} onChange={e => setD(p => ({ ...p, annualBudget: { ...(p.annualBudget || {}), [i + 1]: parseFloat(e.target.value) || 0 } }))} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Total anual: <span className="mono" style={{ color: '#69F0AE' }}>{formatBRL(Object.values(d.annualBudget || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0))}</span></div>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12 }}>
                 <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
                 {!isNew && <button className="btn-danger" onClick={remove}>🗑</button>}

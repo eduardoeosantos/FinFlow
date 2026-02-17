@@ -1,25 +1,47 @@
 export const DEFAULT_EXPENSE_CATS = [
-  { id: 'alimentacao', name: 'Alimentação', icon: '🍽️', budget: 1500 },
-  { id: 'transporte', name: 'Transporte', icon: '🚗', budget: 800 },
-  { id: 'moradia', name: 'Moradia', icon: '🏠', budget: 3000 },
-  { id: 'saude', name: 'Saúde', icon: '💊', budget: 500 },
-  { id: 'educacao', name: 'Educação', icon: '📚', budget: 400 },
-  { id: 'lazer', name: 'Lazer', icon: '🎮', budget: 600 },
-  { id: 'vestuario', name: 'Vestuário', icon: '👔', budget: 400 },
-  { id: 'servicos', name: 'Serviços', icon: '⚡', budget: 500 },
-  { id: 'outros', name: 'Outros', icon: '📦', budget: 300 },
+  { id: 'alimentacao', name: 'Alimentação', icon: '🍽️', budgetType: 'monthly', monthlyBudget: 1500, annualBudget: {} },
+  { id: 'transporte', name: 'Transporte', icon: '🚗', budgetType: 'monthly', monthlyBudget: 800, annualBudget: {} },
+  { id: 'moradia', name: 'Moradia', icon: '🏠', budgetType: 'monthly', monthlyBudget: 3000, annualBudget: {} },
+  { id: 'saude', name: 'Saúde', icon: '💊', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
+  { id: 'educacao', name: 'Educação', icon: '📚', budgetType: 'monthly', monthlyBudget: 400, annualBudget: {} },
+  { id: 'lazer', name: 'Lazer', icon: '🎮', budgetType: 'monthly', monthlyBudget: 600, annualBudget: {} },
+  { id: 'vestuario', name: 'Vestuário', icon: '👔', budgetType: 'annual', monthlyBudget: 400, annualBudget: { 1: 200, 2: 0, 3: 300, 4: 0, 5: 0, 6: 500, 7: 0, 8: 0, 9: 200, 10: 0, 11: 0, 12: 600 } },
+  { id: 'servicos', name: 'Serviços', icon: '⚡', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
+  { id: 'outros', name: 'Outros', icon: '📦', budgetType: 'monthly', monthlyBudget: 300, annualBudget: {} },
 ];
 
 export const DEFAULT_INCOME_CATS = [
-  { id: 'salario', name: 'Salário', icon: '💰' },
-  { id: 'freelance', name: 'Freelance', icon: '💻' },
-  { id: 'rendimentos', name: 'Rendimentos', icon: '📈' },
-  { id: 'outros_renda', name: 'Outros', icon: '💵' },
+  { id: 'salario', name: 'Salário', icon: '💰', budgetType: 'monthly', monthlyBudget: 12000, annualBudget: {} },
+  { id: 'freelance', name: 'Freelance', icon: '💻', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
+  { id: 'rendimentos', name: 'Rendimentos', icon: '📈', budgetType: 'monthly', monthlyBudget: 0, annualBudget: {} },
+  { id: 'outros_renda', name: 'Outros', icon: '💵', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
 ];
 
 export const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+export const MONTHS_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
 export const formatBRL = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 export const genId = () => Math.random().toString(36).slice(2, 10);
+
+/**
+ * Get the budget for a category in a specific month (1-12).
+ */
+export function getCatBudget(cat, month) {
+  if (!cat) return 0;
+  if (cat.budgetType === 'annual' && cat.annualBudget) {
+    return cat.annualBudget[month] || 0;
+  }
+  return cat.monthlyBudget || 0;
+}
+
+/**
+ * Get total budget for a category across a range of months.
+ * months = array of { month: 1-12, year: YYYY }
+ */
+export function getCatBudgetRange(cat, months) {
+  if (!cat) return 0;
+  return months.reduce((sum, m) => sum + getCatBudget(cat, m.month), 0);
+}
 
 export const getCategoryByDesc = (desc) => {
   const d = (desc || '').toLowerCase();
