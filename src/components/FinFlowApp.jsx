@@ -79,6 +79,9 @@ export default function FinFlowApp() {
   const [newTx, setNewTx] = useState({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0] });
   const [notification, setNotification] = useState(null);
   const [forecastMonths, setForecastMonths] = useState(6);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [hasSampleData, setHasSampleData] = useState(false);
 
   // Import state
   const [importStaging, setImportStaging] = useState([]);
@@ -88,6 +91,7 @@ export default function FinFlowApp() {
 
   const fileRef = useRef(null);
   const importRef = useRef(null);
+  const backupRef = useRef(null);
 
   const notify = (msg, type = 'success') => {
     setNotification({ msg, type });
@@ -102,16 +106,20 @@ export default function FinFlowApp() {
       if (data.accounts) setAccounts(data.accounts);
       if (data.budgets) setBudgets(data.budgets);
       if (data.importHistory) setImportHistory(data.importHistory);
+      setHasSampleData(!!data.isSampleData);
     } else {
       setTransactions(generateSampleData());
+      setHasSampleData(true);
     }
+    // Load API key separately (not in main data)
+    try { const k = localStorage.getItem('finflow-api-key'); if (k) setApiKey(k); } catch {}
     setLoading(false);
   }, []);
 
   // Save data
   useEffect(() => {
-    if (!loading) saveData({ transactions, accounts, budgets, importHistory });
-  }, [transactions, accounts, budgets, importHistory, loading]);
+    if (!loading) saveData({ transactions, accounts, budgets, importHistory, isSampleData: hasSampleData });
+  }, [transactions, accounts, budgets, importHistory, hasSampleData, loading]);
 
   // Add transaction
   const addTransaction = useCallback((tx) => {
@@ -123,25 +131,22 @@ export default function FinFlowApp() {
   const handlePhotoCapture = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!apiKey) { notify('Configure sua API Key em Configurações primeiro!', 'error'); setPage('settings'); return; }
     setScanning(true); setScanResult(null);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const b64 = reader.result.split(',')[1];
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-            messages: [{ role: 'user', content: [
-              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
-              { type: 'text', text: `Analise este recibo. Retorne APENAS JSON: {"description":"nome","amount":valor,"category":"alimentacao|transporte|moradia|saude|educacao|lazer|vestuario|servicos|investimentos|outros","date":"YYYY-MM-DD"} Hoje: ${today.toISOString().split('T')[0]}` }
-            ]}]
-          })
+        const resp = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: b64, apiKey }),
         });
         const data = await resp.json();
-        const parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim());
-        setScanResult(parsed);
+        if (!resp.ok) { notify(data.error || 'Erro ao escanear.', 'error'); setScanning(false); return; }
+        setScanResult(data.data);
         notify('Recibo escaneado!');
-      } catch { notify('Falha na leitura.', 'error'); }
+      } catch { notify('Falha na leitura. Tente novamente.', 'error'); }
       setScanning(false);
     };
     reader.readAsDataURL(file);
@@ -219,6 +224,56 @@ export default function FinFlowApp() {
 
   const clearStaging = () => { setImportStaging([]); };
 
+  /* ── Settings Functions ── */
+  const saveApiKey = (key) => {
+    setApiKey(key);
+    try { localStorage.setItem('finflow-api-key', key); } catch {}
+    notify('API Key salva!');
+  };
+
+  const clearAllData = () => {
+    setTransactions([]);
+    setImportHistory([]);
+    setImportStaging([]);
+    setAccounts(defaultAccounts);
+    const b = {}; CATEGORIES.forEach(c => { b[c.id] = c.budget; }); setBudgets(b);
+    setHasSampleData(false);
+    notify('Todos os dados foram limpos!');
+  };
+
+  const clearAndLoadSample = () => {
+    setTransactions(generateSampleData());
+    setHasSampleData(true);
+    notify('Dados de exemplo carregados!');
+  };
+
+  const exportBackup = () => {
+    const data = { transactions, accounts, budgets, importHistory, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `finflow-backup-${new Date().toISOString().split('T')[0]}.json`; a.click();
+    URL.revokeObjectURL(url);
+    notify('Backup exportado!');
+  };
+
+  const importBackupFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.transactions) {
+          setTransactions(data.transactions);
+          if (data.accounts) setAccounts(data.accounts);
+          if (data.budgets) setBudgets(data.budgets);
+          if (data.importHistory) setImportHistory(data.importHistory);
+          setHasSampleData(false);
+          notify(`Backup restaurado! ${data.transactions.length} transações carregadas.`);
+        } else { notify('Arquivo inválido.', 'error'); }
+      } catch { notify('Erro ao ler o backup.', 'error'); }
+    };
+    reader.readAsText(file);
+  };
+
   /* ── Computed values ── */
   const fd = useMemo(() => computeForecast(transactions, accounts), [transactions, accounts]);
   const thisMonthTx = transactions.filter(tx => { const d = new Date(tx.date); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; });
@@ -247,6 +302,7 @@ export default function FinFlowApp() {
     { id: 'budget', icon: '◉', label: 'Orçamento' },
     { id: 'forecast', icon: '◐', label: 'Forecast' },
     { id: 'accounts', icon: '◧', label: 'Contas' },
+    { id: 'settings', icon: '⚙', label: 'Config.' },
   ];
 
   return (
@@ -292,10 +348,21 @@ export default function FinFlowApp() {
         {/* Hidden file inputs */}
         <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} style={{ display: 'none' }} />
         <input ref={importRef} type="file" accept=".csv,.ofx,.qfx,.tsv,.txt" onChange={(e) => { handleImportFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+        <input ref={backupRef} type="file" accept=".json" onChange={(e) => { if (e.target.files?.[0]) importBackupFile(e.target.files[0]); e.target.value = ''; }} style={{ display: 'none' }} />
 
         {/* ══════ DASHBOARD ══════ */}
         {page === 'dashboard' && (
           <div className="stagger">
+            {hasSampleData && (
+              <div className="glass" style={{ marginBottom: 20, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, borderColor: 'rgba(255,215,64,0.3)', background: 'rgba(255,215,64,0.05)' }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#FFD740' }}>Dados de exemplo carregados</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Estes são dados fictícios para demonstração. Limpe para começar com seus dados reais.</div>
+                </div>
+                <button className="btn-danger" onClick={() => { clearAllData(); }} style={{ whiteSpace: 'nowrap' }}>🗑 Limpar dados</button>
+              </div>
+            )}
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
               <div>
                 <h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Dashboard</h1>
@@ -575,7 +642,14 @@ export default function FinFlowApp() {
             </div>
             <div className="scan-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
               <div className="glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 340 }}>
-                {scanning ? (
+                {!apiKey ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 56, opacity: 0.3, marginBottom: 16 }}>🔑</div>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>API Key necessária</p>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 24, lineHeight: 1.6, maxWidth: 280 }}>Configure sua chave da Anthropic para usar o scanner de recibos</p>
+                    <button className="btn-primary" onClick={() => setPage('settings')}>⚙ Ir para Configurações</button>
+                  </div>
+                ) : scanning ? (
                   <div style={{ textAlign: 'center' }}><div className="loader" /><p style={{ color: 'rgba(255,255,255,0.5)', marginTop: 20, fontSize: 14 }}>Analisando com IA...</p></div>
                 ) : (
                   <>
@@ -750,6 +824,126 @@ export default function FinFlowApp() {
                   <div className="mono" style={{ fontSize: 30, fontWeight: 700, textShadow: `0 0 30px ${acc.color}22` }}>{formatBRL(acc.balance)}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════ SETTINGS ══════ */}
+        {page === 'settings' && (
+          <div style={{ animation: 'fadeIn 0.4s ease' }}>
+            <div style={{ marginBottom: 28 }}>
+              <h1 className="page-title" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1, background: 'linear-gradient(135deg,#fff 30%,#B24DFF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Configurações</h1>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>Gerencie sua API key, dados e backup</p>
+            </div>
+
+            <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
+              {/* API Key */}
+              <div className="glass" style={{ borderColor: apiKey ? 'rgba(105,240,174,0.15)' : 'rgba(255,215,64,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <span style={{ fontSize: 24 }}>🔑</span>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>API Key — Claude (Anthropic)</h3>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Necessária para o scanner de recibos funcionar</p>
+                  </div>
+                  {apiKey && <span className="badge badge-approved" style={{ marginLeft: 'auto' }}>✓ Configurada</span>}
+                  {!apiKey && <span className="badge badge-pending" style={{ marginLeft: 'auto' }}>⏳ Pendente</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <input
+                      className="glass-input"
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="sk-ant-api03-..."
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                      style={{ paddingRight: 44, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', fontSize: 16, padding: 4 }}
+                    >
+                      {showApiKey ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                  <button className="btn-primary" onClick={() => saveApiKey(apiKey)} style={{ whiteSpace: 'nowrap' }}>Salvar</button>
+                </div>
+                <div style={{ marginTop: 14, padding: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>
+                    📌 <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Como obter:</strong> Acesse{' '}
+                    <span style={{ color: '#00E5FF' }}>console.anthropic.com</span> → API Keys → Create Key<br />
+                    💰 <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Custo:</strong> ~R$ 0,02 por foto escaneada (Claude Sonnet)<br />
+                    🔒 <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Segurança:</strong> A chave fica salva apenas no seu navegador
+                  </p>
+                </div>
+              </div>
+
+              {/* Data Management */}
+              <div className="glass">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <span style={{ fontSize: 24 }}>💾</span>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>Gerenciar Dados</h3>
+                </div>
+
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {/* Stats */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 8 }}>
+                    {[
+                      { l: 'Transações', v: transactions.length, c: '#00E5FF' },
+                      { l: 'Contas', v: accounts.length, c: '#FFD740' },
+                      { l: 'Importações', v: importHistory.length, c: '#69F0AE' },
+                      { l: 'Tipo', v: hasSampleData ? 'Exemplo' : 'Real', c: hasSampleData ? '#FF6B9D' : '#69F0AE' },
+                    ].map((s, i) => (
+                      <div key={i} style={{ textAlign: 'center', padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div className="mono" style={{ fontSize: 24, fontWeight: 700, color: s.c }}>{s.v}</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <button className="btn-secondary" onClick={exportBackup} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                      <span style={{ fontSize: 18 }}>📤</span>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>Exportar Backup</div>
+                        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Salvar arquivo .json</div>
+                      </div>
+                    </button>
+                    <button className="btn-secondary" onClick={() => backupRef.current?.click()} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                      <span style={{ fontSize: 18 }}>📥</span>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>Restaurar Backup</div>
+                        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Carregar arquivo .json</div>
+                      </div>
+                    </button>
+                    <button className="btn-secondary" onClick={clearAndLoadSample} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                      <span style={{ fontSize: 18 }}>🎲</span>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>Carregar Dados Exemplo</div>
+                        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Dados fictícios para teste</div>
+                      </div>
+                    </button>
+                    <button onClick={clearAllData} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', background: 'rgba(255,107,157,0.08)', border: '1px solid rgba(255,107,157,0.2)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: '#FF6B9D', transition: 'all 0.3s ease' }}>
+                      <span style={{ fontSize: 18 }}>🗑</span>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>Limpar Tudo</div>
+                        <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>Zerar e começar do zero</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* About */}
+              <div className="glass" style={{ textAlign: 'center', padding: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+                  <div style={{ width: 52, height: 52, borderRadius: 16, background: 'linear-gradient(135deg,#B24DFF,#00E5FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 800, boxShadow: '0 0 30px rgba(178,77,255,0.4)' }}>F</div>
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>FinFlow</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4, letterSpacing: 2, textTransform: 'uppercase' }}>Liquid Glass Edition</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 12 }}>Versão 2.0 — Fevereiro 2026</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>Powered by Claude AI (Anthropic)</div>
+              </div>
             </div>
           </div>
         )}
