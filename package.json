@@ -1,0 +1,23 @@
+{
+  "name": "finflow",
+  "version": "2.0.0",
+  "private": true,
+  "description": "FinFlow — Gestão Financeira Pessoal com IA",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "papaparse": "^5.4.1",
+    "next-pwa": "^5.6.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0"
+  }
+}
