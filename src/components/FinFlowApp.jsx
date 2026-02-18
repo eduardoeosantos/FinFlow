@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { DEFAULT_EXPENSE_CATS, DEFAULT_INCOME_CATS, MONTHS, MONTHS_FULL, formatBRL, genId, getCategoryByDesc, getCatBudget, getCatBudgetRange } from '@/lib/constants';
 import { loadData, saveData } from '@/lib/storage';
 import { computeForecast } from '@/lib/forecast';
+import { generatePredictions, getMonthlyBudgetTarget } from '@/lib/predictions';
 import { parseImportFile, detectDuplicates } from '@/lib/importParser';
 import IconPicker from './IconPicker';
 
@@ -96,6 +97,8 @@ export default function FinFlowApp() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [showAddTx, setShowAddTx] = useState(false);
+  const [editingTxId, setEditingTxId] = useState(null);
+  const [chartHover, setChartHover] = useState(null);
   const [forecastMonths, setForecastMonths] = useState(6);
   const [viewPeriod, setViewPeriod] = useState('monthly'); // monthly | quarterly | semiannual | annual
   const [viewMonth, setViewMonth] = useState(cm + 1); // 1-12
@@ -158,6 +161,7 @@ export default function FinFlowApp() {
 
   const accounts4forecast = [{ balance: bankTotal }];
   const fd = useMemo(() => computeForecast(transactions, accounts4forecast), [transactions, bankTotal]);
+  const predictions = useMemo(() => generatePredictions(transactions, expenseCats, incomeCats, viewYear, viewMonth), [transactions, expenseCats, incomeCats, viewYear, viewMonth]);
 
   // ─── PERIOD HELPERS ───
   const getViewMonths = () => {
@@ -253,7 +257,24 @@ export default function FinFlowApp() {
     }
   }, []);
 
-  // Parse amount accepting both "." and ","
+  const updateTransaction = useCallback((id, updates) => {
+    setTransactions(prev => prev.map(tx => {
+      if (tx.id !== id) return tx;
+      const updated = { ...tx, ...updates };
+      // Recalculate amount sign based on type
+      if (updates.amount !== undefined || updates.type !== undefined) {
+        const absAmt = Math.abs(updates.amount !== undefined ? parseFloat(updates.amount) || 0 : tx.amount);
+        updated.amount = (updated.type === 'expense' || updated.type === 'transfer' || updated.type === 'card_payment') ? -absAmt : absAmt;
+      }
+      return updated;
+    }).sort((a, b) => b.date.localeCompare(a.date)));
+  }, []);
+
+  const deleteTransaction = useCallback((id) => {
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
+    setEditingTxId(null);
+    notify('Lançamento excluído!');
+  }, []);
   const parseAmountInput = (str) => {
     if (!str) return 0;
     const s = str.toString().trim().replace(/R\$\s*/gi, '').replace(/\s/g, '');
@@ -412,57 +433,195 @@ export default function FinFlowApp() {
                 <button onClick={periodNext} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 18, padding: '2px 6px' }}>›</button>
               </div>
             </div>
-            {/* KPIs */}
+            {/* ══ POSIÇÃO ATUAL ══ */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginBottom: 24 }}>
+              <div className="glass hoverable" style={{ position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,#B24DFF,transparent)', opacity: 0.6 }} />
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 }}>Patrimônio Total</div>
+                <div className="mono" style={{ fontSize: 24, fontWeight: 700, color: '#B24DFF', textShadow: '0 0 30px #B24DFF33' }}>{formatBRL(totalPatrimonio)}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>Bancos: {formatBRL(bankTotal)} · Investimentos: {formatBRL(investTotal)}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+                {bankAccounts.map(a => (
+                  <div key={a.id} className="glass" style={{ minWidth: 150, padding: '12px 16px', flex: '0 0 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ fontSize: 16 }}>{a.icon}</span><span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{a.name}</span></div>
+                    <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: a.balance >= 0 ? '#69F0AE' : '#FF6B9D' }}>{formatBRL(a.balance)}</div>
+                  </div>
+                ))}
+                {creditCards.map(c => (
+                  <div key={c.id} className="glass" style={{ minWidth: 150, padding: '12px 16px', flex: '0 0 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ fontSize: 16 }}>{c.icon}</span><span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{c.name}</span></div>
+                    <div className="mono" style={{ fontSize: 12, color: '#FF6B9D' }}>Fatura: {formatBRL(c.used || 0)}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>Limite: {formatBRL(c.limit)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* ══ RESULTADO DO PERÍODO ══ */}
             <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
               {[
-                { label: 'Patrimônio Total', value: formatBRL(totalPatrimonio), color: '#B24DFF', sub: `Bancos: ${formatBRL(bankTotal)}` },
-                { label: 'Receita', value: formatBRL(periodIncome), color: '#69F0AE', sub: budgetIncTotal > 0 ? `Previsto: ${formatBRL(budgetIncTotal)}` : `${bankAccounts.length} contas` },
-                { label: 'Despesa', value: formatBRL(periodExpense), color: '#FF6B9D', sub: budgetExpTotal > 0 ? `Previsto: ${formatBRL(budgetExpTotal)}` : (cardDebt > 0 ? `Cartões: ${formatBRL(cardDebt)}` : '') },
-                { label: 'Saldo', value: formatBRL(periodIncome - periodExpense), color: periodIncome - periodExpense >= 0 ? '#69F0AE' : '#FF6B9D', sub: `Economia: ${periodIncome > 0 ? ((1 - periodExpense / periodIncome) * 100).toFixed(1) : 0}%` },
+                { label: `Receita · ${periodLabel()}`, value: formatBRL(periodIncome), color: '#69F0AE', sub: budgetIncTotal > 0 ? `Meta: ${formatBRL(budgetIncTotal)} (${periodIncome > 0 ? ((periodIncome / budgetIncTotal) * 100).toFixed(0) : 0}%)` : 'Sem meta' },
+                { label: `Despesa · ${periodLabel()}`, value: formatBRL(periodExpense), color: '#FF6B9D', sub: budgetExpTotal > 0 ? `Orçamento: ${formatBRL(budgetExpTotal)} (${budgetExpTotal > 0 ? ((periodExpense / budgetExpTotal) * 100).toFixed(0) : 0}%)` : 'Sem orçamento' },
+                { label: 'Resultado', value: formatBRL(periodIncome - periodExpense), color: periodIncome - periodExpense >= 0 ? '#69F0AE' : '#FF6B9D', sub: periodIncome > 0 ? `Economia: ${((1 - periodExpense / periodIncome) * 100).toFixed(1)}%` : '—' },
+                { label: 'Meta de Economia', value: budgetIncTotal > 0 && budgetExpTotal > 0 ? formatBRL(budgetIncTotal - budgetExpTotal) : '—', color: '#64B5F6', sub: budgetIncTotal > 0 && budgetExpTotal > 0 ? ((periodIncome - periodExpense) >= (budgetIncTotal - budgetExpTotal) ? '✅ Meta atingida' : `⚠️ Faltam ${formatBRL((budgetIncTotal - budgetExpTotal) - (periodIncome - periodExpense))}`) : 'Configure orçamentos' },
               ].map((k, i) => (
                 <div key={i} className="glass hoverable" style={{ position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${k.color},transparent)`, opacity: 0.6 }} />
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10 }}>{k.label}</div>
-                  <div className="mono" style={{ fontSize: 24, fontWeight: 700, color: k.color, textShadow: `0 0 30px ${k.color}33` }}>{k.value}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>{k.label}</div>
+                  <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: k.color, textShadow: `0 0 30px ${k.color}33` }}>{k.value}</div>
                   {k.sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>{k.sub}</div>}
                 </div>
               ))}
             </div>
-            {/* Quick accounts */}
-            {bankAccounts.length > 0 && (
-              <div style={{ display: 'flex', gap: 12, marginBottom: 24, overflowX: 'auto' }}>
-                {bankAccounts.map(a => (
-                  <div key={a.id} className="glass" style={{ minWidth: 180, padding: '14px 18px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 18 }}>{a.icon}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{a.name}</span></div>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: a.balance >= 0 ? '#69F0AE' : '#FF6B9D' }}>{formatBRL(a.balance)}</div>
+            {/* ══ EVOLUÇÃO MENSAL ══ */}
+            <div className="glass" style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>📊 Evolução Mensal</h3>
+              {(() => {
+                const rawData = fd.monthlyData.slice(-8);
+                if (rawData.length < 2) return <p style={{ color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: 20 }}>Dados insuficientes</p>;
+                const incomeData = rawData.map(([, d]) => d.income);
+                const expenseData = rawData.map(([, d]) => d.expense);
+                const resultData = rawData.map(([, d]) => d.income - d.expense);
+                const labels = rawData.map(([k]) => { const [y, m] = k.split('-'); return `${MONTHS[parseInt(m)-1]}'${y.slice(2)}`; });
+                // Budget targets per month
+                const budgetTargets = rawData.map(([k]) => {
+                  const mo = parseInt(k.split('-')[1], 10);
+                  const expB = expenseCats.reduce((s, c) => s + getCatBudget(c, mo), 0);
+                  const incB = incomeCats.reduce((s, c) => s + getCatBudget(c, mo), 0);
+                  return incB - expB; // savings target
+                });
+                const allVals = [...incomeData, ...expenseData, ...resultData.map(Math.abs), ...budgetTargets.map(Math.abs)];
+                const maxVal = Math.max(...allVals, 1) * 1.2;
+                const minVal = Math.min(0, ...resultData, ...budgetTargets) * 1.1;
+                const range = maxVal - minVal;
+                const W = 520, H = 200, padL = 50, padR = 20, padT = 15, padB = 5;
+                const chartW = W - padL - padR, chartH = H - padT - padB;
+                const n = rawData.length;
+                const toY = (v) => padT + chartH - ((v - minVal) / range) * chartH;
+                const toX = (i) => padL + (i / (n - 1)) * chartW;
+                const zeroY = toY(0);
+
+                const smoothPath = (data) => {
+                  const pts = data.map((v, i) => ({ x: toX(i), y: toY(v) }));
+                  if (pts.length < 2) return '';
+                  let d = `M ${pts[0].x} ${pts[0].y}`;
+                  for (let i = 0; i < pts.length - 1; i++) {
+                    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+                    const t = 0.35;
+                    d += ` C ${p1.x + (p2.x - p0.x) * t} ${p1.y + (p2.y - p0.y) * t}, ${p2.x - (p3.x - p1.x) * t} ${p2.y - (p3.y - p1.y) * t}, ${p2.x} ${p2.y}`;
+                  }
+                  return d;
+                };
+
+                const hIdx = chartHover;
+
+                return (
+                  <div style={{ position: 'relative' }}>
+                    <svg viewBox={`0 0 ${W} ${H + 35}`} width="100%" style={{ overflow: 'visible' }}>
+                      <defs>
+                        <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#69F0AE" stopOpacity="0.2" /><stop offset="100%" stopColor="#69F0AE" stopOpacity="0.01" /></linearGradient>
+                        <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FF6B9D" stopOpacity="0.2" /><stop offset="100%" stopColor="#FF6B9D" stopOpacity="0.01" /></linearGradient>
+                      </defs>
+                      {/* Grid */}
+                      {[0, 0.25, 0.5, 0.75, 1].map((p, i) => {
+                        const val = minVal + range * p;
+                        const y = toY(val);
+                        return (<g key={i}><line x1={padL} x2={W - padR} y1={y} y2={y} stroke="rgba(255,255,255,0.04)" /><text x={padL - 6} y={y + 3} textAnchor="end" fill="rgba(255,255,255,0.2)" fontSize="8" fontFamily="inherit">{val >= 1000 ? `${(val/1000).toFixed(0)}k` : val.toFixed(0)}</text></g>);
+                      })}
+                      {/* Zero line */}
+                      {minVal < 0 && <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />}
+                      {/* Area fills */}
+                      <path d={`${smoothPath(incomeData)} L ${toX(n-1)} ${zeroY} L ${toX(0)} ${zeroY} Z`} fill="url(#gInc)" />
+                      <path d={`${smoothPath(expenseData)} L ${toX(n-1)} ${zeroY} L ${toX(0)} ${zeroY} Z`} fill="url(#gExp)" />
+                      {/* Lines */}
+                      <path d={smoothPath(incomeData)} fill="none" stroke="#69F0AE" strokeWidth="2" strokeLinecap="round" />
+                      <path d={smoothPath(expenseData)} fill="none" stroke="#FF6B9D" strokeWidth="2" strokeLinecap="round" />
+                      {/* Result line with color segments */}
+                      {resultData.map((v, i) => {
+                        if (i === 0) return null;
+                        const metTarget = budgetTargets[i] > 0 ? v >= budgetTargets[i] : v >= 0;
+                        return <line key={`r${i}`} x1={toX(i-1)} y1={toY(resultData[i-1])} x2={toX(i)} y2={toY(v)} stroke={metTarget ? '#64B5F6' : '#FF9800'} strokeWidth="2.5" strokeLinecap="round" />;
+                      })}
+                      {/* Budget target dashed */}
+                      <path d={smoothPath(budgetTargets)} fill="none" stroke="rgba(100,181,246,0.3)" strokeWidth="1.5" strokeDasharray="6 4" />
+                      {/* Dots on result line */}
+                      {resultData.map((v, i) => {
+                        const metTarget = budgetTargets[i] > 0 ? v >= budgetTargets[i] : v >= 0;
+                        return <circle key={`rd${i}`} cx={toX(i)} cy={toY(v)} r={hIdx === i ? 5 : 3.5} fill={metTarget ? '#64B5F6' : '#FF9800'} stroke="#0F1117" strokeWidth="1.5" style={{ cursor: 'pointer' }} />;
+                      })}
+                      {/* Hover zones */}
+                      {rawData.map((_, i) => (
+                        <rect key={`hz${i}`} x={toX(i) - chartW / n / 2} y={padT} width={chartW / n} height={chartH} fill="transparent" onMouseEnter={() => setChartHover(i)} onMouseLeave={() => setChartHover(null)} style={{ cursor: 'pointer' }} />
+                      ))}
+                      {/* Hover vertical line */}
+                      {hIdx !== null && hIdx >= 0 && hIdx < n && (
+                        <line x1={toX(hIdx)} x2={toX(hIdx)} y1={padT} y2={padT + chartH} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
+                      )}
+                      {/* Month labels */}
+                      {labels.map((l, i) => {
+                        const metTarget = budgetTargets[i] > 0 ? resultData[i] >= budgetTargets[i] : resultData[i] >= 0;
+                        return <text key={i} x={toX(i)} y={H + 18} textAnchor="middle" fill={metTarget ? '#64B5F6' : '#FF9800'} fontSize="10" fontWeight={hIdx === i ? '700' : '400'} fontFamily="inherit">{l}</text>;
+                      })}
+                    </svg>
+                    {/* Hover tooltip */}
+                    {hIdx !== null && hIdx >= 0 && hIdx < n && (
+                      <div style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(15,17,23,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px 14px', fontSize: 12, minWidth: 170, zIndex: 5 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6, color: 'rgba(255,255,255,0.9)' }}>{labels[hIdx]}</div>
+                        <div style={{ color: '#69F0AE', marginBottom: 3 }}>Receita: {formatBRL(incomeData[hIdx])}</div>
+                        <div style={{ color: '#FF6B9D', marginBottom: 3 }}>Despesa: {formatBRL(expenseData[hIdx])}</div>
+                        <div style={{ color: resultData[hIdx] >= 0 ? '#69F0AE' : '#FF6B9D', fontWeight: 600, marginBottom: 3 }}>Resultado: {formatBRL(resultData[hIdx])}</div>
+                        {budgetTargets[hIdx] !== 0 && <div style={{ color: '#64B5F6', fontSize: 11 }}>Meta: {formatBRL(budgetTargets[hIdx])}</div>}
+                        {budgetTargets[hIdx] > 0 && <div style={{ fontSize: 11, marginTop: 3, color: resultData[hIdx] >= budgetTargets[hIdx] ? '#69F0AE' : '#FF9800' }}>{resultData[hIdx] >= budgetTargets[hIdx] ? '✅ Meta atingida' : '⚠️ Abaixo da meta'}</div>}
+                      </div>
+                    )}
+                    {/* Legend */}
+                    <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                      {[{c:'#69F0AE',l:'Receita'},{c:'#FF6B9D',l:'Despesa'},{c:'#64B5F6',l:'Resultado (meta ✓)',s:'solid'},{c:'#FF9800',l:'Resultado (abaixo)',s:'solid'},{c:'rgba(100,181,246,0.5)',l:'Meta economia',s:'dashed'}].map((x,i)=>(
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <div style={{ width: 14, height: 2, background: x.c, borderBottom: x.s === 'dashed' ? '2px dashed' : 'none', borderColor: x.c }} />
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{x.l}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-                {creditCards.map(c => (
-                  <div key={c.id} className="glass" style={{ minWidth: 180, padding: '14px 18px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 18 }}>{c.icon}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{c.name}</span></div>
-                    <div className="mono" style={{ fontSize: 14, color: '#FF6B9D' }}>Fatura: {formatBRL(c.used || 0)}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Limite: {formatBRL(c.limit)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Expense vs Budget + Income vs Budget */}
+                );
+              })()}
+            </div>
+            {/* ══ DESPESAS vs ORÇAMENTO + PREVISÃO IA ══ */}
             <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
               <div className="glass">
                 <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>📉 Despesas vs Orçamento</h3>
                 {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).sort((a, b) => (catExpenses[b.id] || 0) - (catExpenses[a.id] || 0)).slice(0, 6).map(cat => {
                   const spent = catExpenses[cat.id] || 0;
                   const budget = getCatBudgetRange(cat, periodMonths);
-                  const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : (spent > 0 ? 100 : 0);
+                  const pred = predictions.expenses[cat.id];
+                  const predicted = pred?.smartPredicted || 0;
+                  const pct = budget > 0 ? (spent / budget) * 100 : (spent > 0 ? 100 : 0);
+                  const predPct = budget > 0 ? Math.min((predicted / budget) * 100, 120) : 0;
                   const over = budget > 0 && spent > budget;
-                  return (<div key={cat.id} style={{ marginBottom: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} {cat.budgetType === 'annual' ? <span style={{ fontSize: 10, color: '#FFD740', marginLeft: 4 }}>anual</span> : ''}</span>
-                      <span className="mono" style={{ fontSize: 12 }}><span style={{ color: over ? '#FF6B9D' : 'rgba(255,255,255,0.6)' }}>{formatBRL(spent)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
+                  return (<div key={cat.id} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name}</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <span className="mono" style={{ fontSize: 12 }}><span style={{ color: over ? '#FF6B9D' : 'rgba(255,255,255,0.6)' }}>{formatBRL(spent)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
+                      </div>
                     </div>
-                    <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 6, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: over ? 'linear-gradient(90deg,#FF6B9D88,#FF6B9D)' : 'linear-gradient(90deg,#B24DFF88,#B24DFF)', borderRadius: 6, transition: 'width 1s' }} />
+                    <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 6, overflow: 'visible' }}>
+                      {/* Actual bar */}
+                      <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: over ? 'linear-gradient(90deg,#FF6B9D88,#FF6B9D)' : 'linear-gradient(90deg,#B24DFF88,#B24DFF)', borderRadius: 6, transition: 'width 1s', position: 'relative', zIndex: 2 }} />
+                      {/* Prediction marker */}
+                      {predicted > 0 && budget > 0 && <div title={`Previsão IA: ${formatBRL(predicted)}`} style={{ position: 'absolute', left: `${Math.min(predPct, 100)}%`, top: -2, width: 3, height: 12, background: '#FFD740', borderRadius: 2, zIndex: 3, opacity: 0.8 }} />}
+                      {/* Budget line dashed */}
+                      {budget > 0 && <div style={{ position: 'absolute', left: '100%', top: -3, bottom: -3, width: 1, borderRight: '2px dashed rgba(255,255,255,0.15)', zIndex: 1 }} />}
                     </div>
+                    {pred && pred.pattern !== 'INSUFFICIENT' && (
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>🤖 {pred.details?.description || pred.pattern}</span>
+                        <span style={{ color: pred.willMeetBudget === false ? '#FF9800' : pred.willMeetBudget === true ? '#69F0AE' : 'rgba(255,255,255,0.2)' }}>
+                          {pred.willMeetBudget === false ? `⚠ Prev: ${formatBRL(predicted)}` : pred.willMeetBudget === true ? '✓ Dentro do orçamento' : ''}
+                        </span>
+                      </div>
+                    )}
                   </div>);
                 })}
                 {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
@@ -472,121 +631,31 @@ export default function FinFlowApp() {
                 {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).map(cat => {
                   const received = catIncomes[cat.id] || 0;
                   const budget = getCatBudgetRange(cat, periodMonths);
+                  const pred = predictions.incomes[cat.id];
+                  const predicted = pred?.smartPredicted || 0;
                   const pct = budget > 0 ? Math.min((received / budget) * 100, 100) : (received > 0 ? 100 : 0);
-                  return (<div key={cat.id} style={{ marginBottom: 14 }}>
+                  const predPct = budget > 0 ? Math.min((predicted / budget) * 100, 120) : 0;
+                  return (<div key={cat.id} style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} {cat.budgetType === 'annual' ? <span style={{ fontSize: 10, color: '#FFD740', marginLeft: 4 }}>anual</span> : ''}</span>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name}</span>
                       <span className="mono" style={{ fontSize: 12 }}><span style={{ color: '#69F0AE' }}>{formatBRL(received)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                     </div>
-                    <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 6, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#69F0AE88,#69F0AE)', borderRadius: 6, transition: 'width 1s' }} />
+                    <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 6, overflow: 'visible' }}>
+                      <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: 'linear-gradient(90deg,#69F0AE88,#69F0AE)', borderRadius: 6, transition: 'width 1s', position: 'relative', zIndex: 2 }} />
+                      {predicted > 0 && budget > 0 && <div title={`Previsão IA: ${formatBRL(predicted)}`} style={{ position: 'absolute', left: `${Math.min(predPct, 100)}%`, top: -2, width: 3, height: 12, background: '#FFD740', borderRadius: 2, zIndex: 3, opacity: 0.8 }} />}
+                      {budget > 0 && <div style={{ position: 'absolute', left: '100%', top: -3, bottom: -3, width: 1, borderRight: '2px dashed rgba(255,255,255,0.15)', zIndex: 1 }} />}
                     </div>
+                    {pred && pred.pattern !== 'INSUFFICIENT' && (
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3 }}>
+                        <span>🤖 {pred.details?.description || pred.pattern}</span>
+                      </div>
+                    )}
                   </div>);
                 })}
                 {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
               </div>
             </div>
-            {/* Evolution chart - Smooth area */}
-            <div className="glass" style={{ marginBottom: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>Evolução Mensal</h3>
-              {(() => {
-                const rawData = fd.monthlyData.slice(-6);
-                if (rawData.length < 2) return <p style={{ color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: 20 }}>Dados insuficientes</p>;
-                const incomeData = rawData.map(([, d]) => d.income);
-                const expenseData = rawData.map(([, d]) => d.expense);
-                const labels = rawData.map(([k]) => { const [y, m] = k.split('-'); const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']; return `${months[parseInt(m)-1]}'${y.slice(2)}`; });
-                const allVals = [...incomeData, ...expenseData];
-                const maxVal = Math.max(...allVals, 1) * 1.15;
-                const W = 480, H = 160, padL = 0, padR = 0, padT = 10, padB = 0;
-                const chartW = W - padL - padR;
-                const chartH = H - padT - padB;
-                const n = rawData.length;
-
-                // Create smooth catmull-rom path
-                const smoothPath = (data) => {
-                  const pts = data.map((v, i) => ({
-                    x: padL + (i / (n - 1)) * chartW,
-                    y: padT + chartH - (v / maxVal) * chartH
-                  }));
-                  if (pts.length < 2) return '';
-                  // Generate smooth curve using cubic bezier
-                  let d = `M ${pts[0].x} ${pts[0].y}`;
-                  for (let i = 0; i < pts.length - 1; i++) {
-                    const p0 = pts[Math.max(0, i - 1)];
-                    const p1 = pts[i];
-                    const p2 = pts[i + 1];
-                    const p3 = pts[Math.min(pts.length - 1, i + 2)];
-                    const tension = 0.35;
-                    const cp1x = p1.x + (p2.x - p0.x) * tension;
-                    const cp1y = p1.y + (p2.y - p0.y) * tension;
-                    const cp2x = p2.x - (p3.x - p1.x) * tension;
-                    const cp2y = p2.y - (p3.y - p1.y) * tension;
-                    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-                  }
-                  return d;
-                };
-
-                const areaPath = (data, color) => {
-                  const line = smoothPath(data);
-                  const lastPt = padL + ((n - 1) / (n - 1)) * chartW;
-                  return `${line} L ${lastPt} ${padT + chartH} L ${padL} ${padT + chartH} Z`;
-                };
-
-                const incomeLine = smoothPath(incomeData);
-                const expenseLine = smoothPath(expenseData);
-                const incomeArea = areaPath(incomeData);
-                const expenseArea = areaPath(expenseData);
-
-                return (
-                  <div>
-                    <svg viewBox={`0 0 ${W} ${H + 30}`} width="100%" style={{ overflow: 'visible' }}>
-                      <defs>
-                        <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#69F0AE" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#69F0AE" stopOpacity="0.02" />
-                        </linearGradient>
-                        <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#FF6B9D" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#FF6B9D" stopOpacity="0.02" />
-                        </linearGradient>
-                      </defs>
-                      {/* Grid lines */}
-                      {[0, 0.25, 0.5, 0.75, 1].map((p, i) => (
-                        <line key={i} x1={padL} x2={W - padR} y1={padT + chartH * (1 - p)} y2={padT + chartH * (1 - p)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
-                      ))}
-                      {/* Area fills */}
-                      <path d={incomeArea} fill="url(#gradIncome)" />
-                      <path d={expenseArea} fill="url(#gradExpense)" />
-                      {/* Lines */}
-                      <path d={incomeLine} fill="none" stroke="#69F0AE" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d={expenseLine} fill="none" stroke="#FF6B9D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                      {/* Dots */}
-                      {incomeData.map((v, i) => (
-                        <circle key={`i${i}`} cx={padL + (i / (n - 1)) * chartW} cy={padT + chartH - (v / maxVal) * chartH} r="3" fill="#69F0AE" stroke="#0F1117" strokeWidth="1.5" />
-                      ))}
-                      {expenseData.map((v, i) => (
-                        <circle key={`e${i}`} cx={padL + (i / (n - 1)) * chartW} cy={padT + chartH - (v / maxVal) * chartH} r="3" fill="#FF6B9D" stroke="#0F1117" strokeWidth="1.5" />
-                      ))}
-                      {/* Month labels */}
-                      {labels.map((l, i) => (
-                        <text key={i} x={padL + (i / (n - 1)) * chartW} y={H + 18} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="10" fontFamily="inherit">{l}</text>
-                      ))}
-                    </svg>
-                    <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#69F0AE' }} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Receitas</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF6B9D' }} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Despesas</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            {/* Recent transactions */}
+            {/* ══ LANÇAMENTOS RECENTES ══ */}
             <div className="glass">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>Lançamentos do Período</h3>
@@ -665,14 +734,66 @@ export default function FinFlowApp() {
                 <button className="btn-primary" onClick={handleAddManual}>✓ Lançar</button>
               </div>
             )}
-            {transactions.map(tx => { const cat = getCat(tx.category); return (
-              <div key={tx.id} className="tx-row">
-                <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
+            {transactions.map(tx => { const cat = getCat(tx.category); const isEditing = editingTxId === tx.id; return (
+              <div key={tx.id}>
+                <div className="tx-row" style={{ cursor: 'pointer' }} onClick={() => setEditingTxId(isEditing ? null : tx.id)}>
+                  <div style={{ width: 40, height: 40, borderRadius: 14, background: isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(178,77,255,0.08)', border: `1px solid ${isEditing ? 'rgba(178,77,255,0.4)' : 'rgba(178,77,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, transition: 'all 0.2s' }}>{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
+                  </div>
+                  <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.type === 'transfer' ? '#B24DFF' : tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
+                  <div style={{ fontSize: 14, opacity: 0.3, marginLeft: 8 }}>{isEditing ? '▾' : '✎'}</div>
                 </div>
-                <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.type === 'income' ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
+                {isEditing && (
+                  <div style={{ background: 'rgba(178,77,255,0.04)', border: '1px solid rgba(178,77,255,0.12)', borderRadius: '0 0 16px 16px', marginTop: -8, padding: '16px 16px 12px', animation: 'fadeIn 0.2s ease' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Descrição</label>
+                        <input className="glass-input" value={tx.description} onChange={e => updateTransaction(tx.id, { description: e.target.value })} style={{ fontSize: 13 }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Valor (R$)</label>
+                        <input className="glass-input" inputMode="decimal" value={Math.abs(tx.amount).toFixed(2)} onChange={e => { const v = parseAmountInput(e.target.value); if (v >= 0) updateTransaction(tx.id, { amount: v }); }} style={{ fontSize: 13 }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Data</label>
+                        <input className="glass-input" type="date" value={tx.date} onChange={e => updateTransaction(tx.id, { date: e.target.value })} style={{ fontSize: 13 }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Tipo</label>
+                        <select className="glass-input" value={tx.type} onChange={e => updateTransaction(tx.id, { type: e.target.value })} style={{ fontSize: 12 }}>
+                          <option value="expense">💸 Despesa</option><option value="income">💰 Receita</option><option value="transfer">🔄 Transferência</option><option value="card_payment">💳 Pagar Fatura</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Categoria</label>
+                        <select className="glass-input" value={tx.category} onChange={e => updateTransaction(tx.id, { category: e.target.value })} style={{ fontSize: 12 }}>
+                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Conta / Cartão</label>
+                        <select className="glass-input" value={tx.cardId || tx.accountId || ''} onChange={e => {
+                          const val = e.target.value;
+                          const isCard = creditCards.some(c => c.id === val);
+                          updateTransaction(tx.id, isCard ? { cardId: val, accountId: '' } : { accountId: val, cardId: '' });
+                        }} style={{ fontSize: 12 }}>
+                          <option value="">Nenhum</option>
+                          {bankAccounts.length > 0 && <optgroup label="Contas">{bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</optgroup>}
+                          {creditCards.length > 0 && <optgroup label="Cartões">{creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <button onClick={() => { if (confirm('Excluir este lançamento?')) deleteTransaction(tx.id); }} style={{ background: 'none', border: '1px solid rgba(255,77,77,0.25)', color: '#FF6B9D', padding: '6px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12 }}>🗑 Excluir</button>
+                      <button onClick={() => { setEditingTxId(null); notify('Salvo!'); }} className="btn-primary" style={{ padding: '6px 20px', fontSize: 12 }}>✓ Fechar</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ); })}
             {transactions.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📋</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum lançamento ainda</p></div>}
