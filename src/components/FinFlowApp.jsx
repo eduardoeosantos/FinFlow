@@ -104,6 +104,9 @@ export default function FinFlowApp() {
   const [budgetTab, setBudgetTab] = useState('expense'); // expense | income
   const [importStaging, setImportStaging] = useState([]);
   const [importHistory, setImportHistory] = useState([]);
+  const [importAccountId, setImportAccountId] = useState('');
+  const [importCardId, setImportCardId] = useState('');
+  const [editingImportId, setEditingImportId] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importDragActive, setImportDragActive] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(null);
@@ -269,7 +272,7 @@ export default function FinFlowApp() {
     reader.readAsDataURL(file);
   };
 
-  const confirmScan = () => { if (scanResult) { addTransaction({ description: scanResult.description, amount: scanResult.amount, category: scanResult.category, type: 'expense', date: scanResult.date || today.toISOString().split('T')[0] }); setScanResult(null); notify('Lançado!'); } };
+  const confirmScan = () => { if (scanResult) { const extra = {}; if (scanResult.cardId) extra.cardId = scanResult.cardId; else if (scanResult.accountId) extra.accountId = scanResult.accountId; addTransaction({ description: scanResult.description, amount: scanResult.amount, category: scanResult.category, type: scanResult.type || 'expense', date: scanResult.date || today.toISOString().split('T')[0], ...extra }); setScanResult(null); notify('Lançado!'); } };
 
   // ─── IMPORT ───
   const handleImportFile = async (file) => { if (!file) return; setImporting(true); try { const parsed = await parseImportFile(file); const checked = detectDuplicates(parsed, transactions); const dupeCount = checked.filter(t => t.isDuplicate).length; setImportStaging(prev => [...prev, ...checked]); notify(`${parsed.length} transações importadas!${dupeCount > 0 ? ` ⚠️ ${dupeCount} possíveis duplicatas.` : ''}`); } catch (err) { notify(err.message, 'error'); } setImporting(false); };
@@ -280,9 +283,18 @@ export default function FinFlowApp() {
   const confirmImport = () => {
     const approved = importStaging.filter(tx => tx.importStatus === 'approved');
     if (!approved.length) { notify('Nenhuma aprovada.', 'error'); return; }
-    approved.forEach(tx => addTransaction({ description: tx.description, amount: tx.amount, category: tx.category, type: tx.type, date: tx.date }));
+    approved.forEach(tx => {
+      const extra = {};
+      // If user selected a card, link expenses to that card
+      if (importCardId && tx.type === 'expense') {
+        extra.cardId = importCardId;
+      } else if (importAccountId && tx.type !== 'card_payment') {
+        extra.accountId = importAccountId;
+      }
+      addTransaction({ description: tx.description, amount: tx.amount, category: tx.category, type: tx.type === 'card_payment' ? 'expense' : tx.type, date: tx.date, ...extra });
+    });
     setImportHistory(prev => [{ id: genId(), date: new Date().toISOString(), fileName: approved[0]?.importSource || 'Import', total: importStaging.length, approved: approved.length, rejected: importStaging.filter(tx => tx.importStatus === 'rejected').length }, ...prev]);
-    setImportStaging([]); notify(`${approved.length} confirmadas!`);
+    setImportStaging([]); setImportAccountId(''); setImportCardId(''); setEditingImportId(null); notify(`${approved.length} confirmadas!`);
   };
 
   // ─── SETTINGS ACTIONS ───
@@ -545,11 +557,42 @@ export default function FinFlowApp() {
           <div style={{ animation: 'fadeIn 0.4s ease' }}>
             <div style={{ marginBottom: 28 }}><h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Importar Extrato</h1></div>
             <div className={`glass dropzone ${importDragActive ? 'drag-active' : ''}`} style={{ textAlign: 'center', padding: '48px 32px', marginBottom: 24, cursor: 'pointer' }} onClick={() => importRef.current?.click()} onDragOver={e => { e.preventDefault(); setImportDragActive(true); }} onDragLeave={() => setImportDragActive(false)} onDrop={handleImportDrop}>
-              {importing ? (<><div className="loader" /><p style={{ marginTop: 16, color: 'rgba(255,255,255,0.5)' }}>Processando...</p></>) : (<><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>⤓</div><p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Arraste seu extrato aqui</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Suporta CSV, XLSX (Excel), OFX/QFX</p></>)}
+              {importing ? (<><div className="loader" /><p style={{ marginTop: 16, color: 'rgba(255,255,255,0.5)' }}>Processando...</p></>) : (<><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>⤓</div><p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Arraste seu extrato aqui</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Suporta CSV, XLSX (Excel/Santander), OFX/QFX</p></>)}
             </div>
             {importStaging.length > 0 && (
+              <>
+              {/* Source Selection */}
+              <div className="glass" style={{ marginBottom: 16, padding: '16px 20px' }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'rgba(255,255,255,0.7)' }}>🏦 De onde veio este extrato?</h4>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {creditCards.length > 0 && (
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Cartão de Crédito</label>
+                      <select className="glass-input" value={importCardId} onChange={e => { setImportCardId(e.target.value); if (e.target.value) setImportAccountId(''); }}>
+                        <option value="">Nenhum (não é fatura)</option>
+                        {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {bankAccounts.length > 0 && (
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Conta Bancária</label>
+                      <select className="glass-input" value={importAccountId} onChange={e => { setImportAccountId(e.target.value); if (e.target.value) setImportCardId(''); }}>
+                        <option value="">Nenhuma</option>
+                        {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                {importStaging[0]?.cardLabel && !importCardId && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#FFD740', padding: '6px 10px', background: 'rgba(255,215,64,0.06)', borderRadius: 8 }}>
+                    💳 Fatura de cartão detectada ({importStaging[0].cardLabel}). Selecione o cartão acima para vincular.
+                  </div>
+                )}
+              </div>
+              {/* Staging Table */}
               <div className="glass" style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600 }}>Revisão ({importStaging.length} transações)</h3>
                     {importStaging.filter(t => t.isDuplicate).length > 0 && (
@@ -562,25 +605,66 @@ export default function FinFlowApp() {
                     <button className="btn-primary" onClick={confirmImport} disabled={approvedCount === 0}>Importar {approvedCount}</button>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 30px 2fr 1fr 1fr 120px', gap: 8, padding: '0 0 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  <span>Status</span><span></span><span>Transação</span><span>Valor</span><span>Categoria</span><span>Ações</span>
-                </div>
-                <div style={{ maxHeight: 400, overflowY: 'auto' }}>
-                  {importStaging.map(tx => { const cat = getCat(tx.category); return (
-                    <div key={tx.id} className="import-row" style={{ display: 'grid', gridTemplateColumns: '80px 30px 2fr 1fr 1fr 120px', gap: 8, padding: '12px 0', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.03)', background: tx.isDuplicate ? 'rgba(255,215,64,0.03)' : 'transparent' }}>
-                      <span className={`badge badge-${tx.importStatus}`}>{tx.importStatus === 'approved' ? '✓' : tx.importStatus === 'rejected' ? '✕' : '⏳'} {tx.importStatus === 'approved' ? 'OK' : tx.importStatus === 'rejected' ? 'Não' : '...'}</span>
-                      <span title={tx.isDuplicate ? `Possível duplicata: ${tx.duplicateOf}` : ''} style={{ fontSize: 16, cursor: tx.isDuplicate ? 'help' : 'default', textAlign: 'center' }}>{tx.isDuplicate ? '⚠️' : ''}</span>
-                      <div><div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{tx.description}</div><div style={{ fontSize: 11, color: tx.isDuplicate ? '#FFD740' : 'rgba(255,255,255,0.3)' }}>{new Date(tx.date+'T12:00:00').toLocaleDateString('pt-BR')}{tx.isDuplicate ? ` · ⚠ ${tx.duplicateOf}` : ''}</div></div>
-                      <span className="mono" style={{ fontSize: 13, color: tx.amount >= 0 ? '#69F0AE' : '#FF6B9D', fontWeight: 600 }}>{formatBRL(tx.amount)}</span>
-                      <select className="glass-input" style={{ padding: '6px 8px', fontSize: 12 }} value={tx.category} onChange={e => updateStagingItem(tx.id, { category: e.target.value })}>{expenseCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}</select>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn-success" onClick={() => updateStagingItem(tx.id, { importStatus: 'approved' })} style={{ padding: '6px 10px', fontSize: 12 }}>✓</button>
-                        <button className="btn-danger" onClick={() => updateStagingItem(tx.id, { importStatus: 'rejected' })} style={{ padding: '6px 10px', fontSize: 12 }}>✕</button>
+                <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+                  {importStaging.map(tx => {
+                    const cat = getCat(tx.category);
+                    const isEditing = editingImportId === tx.id;
+                    return (
+                    <div key={tx.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: tx.isDuplicate ? 'rgba(255,215,64,0.03)' : 'transparent' }}>
+                      <div className="import-row" style={{ display: 'grid', gridTemplateColumns: '70px 24px 2fr 1fr 1.2fr 100px', gap: 8, padding: '10px 0', alignItems: 'center' }}>
+                        <span className={`badge badge-${tx.importStatus}`} style={{ fontSize: 11 }}>{tx.importStatus === 'approved' ? '✓ OK' : tx.importStatus === 'rejected' ? '✕ Não' : '⏳ ...'}</span>
+                        <span title={tx.isDuplicate ? `Possível duplicata: ${tx.duplicateOf}` : ''} style={{ fontSize: 14, cursor: tx.isDuplicate ? 'help' : 'default', textAlign: 'center' }}>{tx.isDuplicate ? '⚠️' : ''}</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
+                          <div style={{ fontSize: 11, color: tx.isDuplicate ? '#FFD740' : 'rgba(255,255,255,0.3)' }}>
+                            {new Date(tx.date+'T12:00:00').toLocaleDateString('pt-BR')}
+                            {tx.cardLabel ? ` · 💳 ${tx.cardLabel}` : ''}
+                            {tx.isDuplicate ? ` · ⚠ ${tx.duplicateOf}` : ''}
+                          </div>
+                        </div>
+                        <span className="mono" style={{ fontSize: 13, color: tx.amount >= 0 ? '#69F0AE' : '#FF6B9D', fontWeight: 600 }}>{formatBRL(tx.amount)}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <select className="glass-input" style={{ padding: '5px 6px', fontSize: 11, flex: 1 }} value={tx.category} onChange={e => updateStagingItem(tx.id, { category: e.target.value })}>
+                            <option value="" disabled>Categoria...</option>
+                            <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                            <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          <button title="Editar" onClick={() => setEditingImportId(isEditing ? null : tx.id)} style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>✏️</button>
+                          <button className="btn-success" onClick={() => updateStagingItem(tx.id, { importStatus: 'approved' })} style={{ padding: '5px 8px', fontSize: 12 }}>✓</button>
+                          <button className="btn-danger" onClick={() => updateStagingItem(tx.id, { importStatus: 'rejected' })} style={{ padding: '5px 8px', fontSize: 12 }}>✕</button>
+                        </div>
                       </div>
+                      {isEditing && (
+                        <div style={{ padding: '8px', display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', gap: 10, background: 'rgba(178,77,255,0.02)', borderRadius: 8, marginBottom: 4 }}>
+                          <div>
+                            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Data</label>
+                            <input className="glass-input" type="date" style={{ padding: '6px 8px', fontSize: 12 }} value={tx.date} onChange={e => updateStagingItem(tx.id, { date: e.target.value })} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Descrição</label>
+                            <input className="glass-input" style={{ padding: '6px 8px', fontSize: 12 }} value={tx.description} onChange={e => updateStagingItem(tx.id, { description: e.target.value })} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Valor (R$)</label>
+                            <input className="glass-input" type="number" step="0.01" style={{ padding: '6px 8px', fontSize: 12 }} value={tx.amount} onChange={e => updateStagingItem(tx.id, { amount: parseFloat(e.target.value) || 0 })} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Tipo</label>
+                            <select className="glass-input" style={{ padding: '6px 8px', fontSize: 12 }} value={tx.type} onChange={e => updateStagingItem(tx.id, { type: e.target.value })}>
+                              <option value="expense">Despesa</option>
+                              <option value="income">Receita</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ); })}
+                    );
+                  })}
                 </div>
               </div>
+              </>
             )}
             {importHistory.length > 0 && (
               <div className="glass"><h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Histórico de Importações</h3>
@@ -606,14 +690,34 @@ export default function FinFlowApp() {
                 <div style={{ textAlign: 'center' }}><div className="loader" /><p style={{ marginTop: 20, color: 'rgba(255,255,255,0.5)' }}>Analisando recibo com IA...</p></div>
               ) : scanResult ? (
                 <div style={{ width: '100%' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, textAlign: 'center' }}>✅ Resultado</h3>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, textAlign: 'center' }}>✅ Resultado — Edite se necessário</h3>
                   <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
-                    {[{ l: 'Descrição', v: scanResult.description }, { l: 'Valor', v: formatBRL(scanResult.amount) }, { l: 'Categoria', v: getCat(scanResult.category)?.name }, { l: 'Data', v: new Date(scanResult.date + 'T12:00:00').toLocaleDateString('pt-BR') }].map(f => (
-                      <div key={f.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{f.l}</span>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>{f.v}</span>
+                    <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Descrição</label><input className="glass-input" value={scanResult.description} onChange={e => setScanResult(p => ({ ...p, description: e.target.value }))} /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Valor (R$)</label><input className="glass-input" type="number" step="0.01" value={scanResult.amount} onChange={e => setScanResult(p => ({ ...p, amount: parseFloat(e.target.value) || 0 }))} /></div>
+                      <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Data</label><input className="glass-input" type="date" value={scanResult.date} onChange={e => setScanResult(p => ({ ...p, date: e.target.value }))} /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Tipo</label><select className="glass-input" value={scanResult.type || 'expense'} onChange={e => setScanResult(p => ({ ...p, type: e.target.value }))}><option value="expense">Despesa</option><option value="income">Receita</option></select></div>
+                      <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Categoria</label>
+                        <select className="glass-input" value={scanResult.category} onChange={e => setScanResult(p => ({ ...p, category: e.target.value }))}>
+                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                        </select>
                       </div>
-                    ))}
+                    </div>
+                    <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>🏦 Pago com</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <select className="glass-input" value={scanResult.cardId || ''} onChange={e => setScanResult(p => ({ ...p, cardId: e.target.value, accountId: e.target.value ? '' : p.accountId }))}>
+                          <option value="">Cartão: nenhum</option>
+                          {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                        </select>
+                        <select className="glass-input" value={scanResult.accountId || ''} onChange={e => setScanResult(p => ({ ...p, accountId: e.target.value, cardId: e.target.value ? '' : p.cardId }))}>
+                          <option value="">Conta: nenhuma</option>
+                          {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 12 }}>
                     <button className="btn-primary" onClick={confirmScan} style={{ flex: 1 }}>✓ Confirmar</button>
