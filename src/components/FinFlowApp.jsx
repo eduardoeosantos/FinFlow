@@ -1521,7 +1521,7 @@ export default function FinFlowApp() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                   <span style={{ }}>{renderIcon('transfer', 24, 'rgba(178,77,255,0.5)')}</span>
                   <div><h3 style={{ fontSize: 16, fontWeight: 600 }}>API Key — Claude (Anthropic)</h3><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Necessária para o scanner de recibos</p></div>
-                  {apiKey ? <span className="badge badge-approved" style={{ marginLeft: 'auto' }}>OK</span> : <span className="badge badge-pending" style={{ marginLeft: 'auto' }}>...<//span>}
+                  {apiKey ? <span className="badge badge-approved" style={{ marginLeft: 'auto' }}>OK</span> : <span className="badge badge-pending" style={{ marginLeft: 'auto' }}>{'...'}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
