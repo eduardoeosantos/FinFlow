@@ -240,14 +240,15 @@ input, select, button, textarea { font-family: 'Outfit', sans-serif; }
   .sidebar-logo, .sidebar-footer { display: none; }
   .sidebar-nav {
     flex-direction: row !important; gap: 0 !important;
-    padding: 8px 4px !important; width: 100%;
-    justify-content: space-around; overflow-x: auto;
+    padding: 6px 8px !important; width: 100%;
+    justify-content: space-evenly; overflow-x: hidden;
   }
   .nav-item {
     flex-direction: column; gap: 2px !important;
-    padding: 8px 6px !important; font-size: 10px !important;
+    padding: 6px 6px !important; font-size: 9px !important;
     min-width: 0; flex: 1; text-align: center; justify-content: center;
   }
+  .nav-item:nth-child(n+7) { display: none; }
   .nav-item span:first-child { font-size: 18px !important; }
   .nav-item.active::before { display: none; }
   .main-content {
@@ -298,3 +299,6 @@ input, select, button, textarea { font-family: 'Outfit', sans-serif; }
 /* ── Select Styled ── */
 select.glass-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
 select.glass-input option { background: #1a1030; color: #fff; }
+
+/* Mobile nav (hidden - sidebar handles mobile) */
+.mobile-nav { display: none; }

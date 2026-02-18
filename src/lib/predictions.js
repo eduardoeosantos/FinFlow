@@ -282,15 +282,19 @@ export function generatePredictions(transactions, expenseCats, incomeCats, year,
     const monthEnd = predictMonthEnd(transactions, cat.id, 'expense', year, month);
     const budget = getCatBudget(cat, month);
 
-    // Smart predicted: blend pattern average with month-end projection
+    // Smart prediction: spentSoFar + estimated remaining
     let smartPredicted = monthEnd.predicted;
-    if (analysis.pattern !== 'INSUFFICIENT') {
-      // If we're early in the month, lean more on historical pattern
-      const monthProgress = monthEnd.spentSoFar > 0 ? monthEnd.confidence : 0;
-      smartPredicted = analysis.avgMonthly * (1 - monthProgress * 0.6) + monthEnd.predicted * monthProgress * 0.6;
-      // But never predict less than what's already spent
-      smartPredicted = Math.max(smartPredicted, monthEnd.spentSoFar);
+    if (analysis.pattern !== 'INSUFFICIENT' && monthEnd.spentSoFar > 0) {
+      // Use the larger of: monthEnd projection OR historical average
+      const projected = Math.max(monthEnd.predicted, analysis.avgMonthly);
+      // Estimated remaining = projected total - what's spent
+      const remaining = Math.max(0, projected - monthEnd.spentSoFar);
+      smartPredicted = monthEnd.spentSoFar + remaining;
+    } else if (analysis.pattern !== 'INSUFFICIENT') {
+      smartPredicted = analysis.avgMonthly;
     }
+    // CRITICAL: prediction must always be >= what's already spent
+    smartPredicted = Math.max(smartPredicted, monthEnd.spentSoFar);
 
     const willMeetBudget = budget > 0 ? smartPredicted <= budget : null;
 
@@ -312,11 +316,14 @@ export function generatePredictions(transactions, expenseCats, incomeCats, year,
     const budget = getCatBudget(cat, month);
 
     let smartPredicted = monthEnd.predicted;
-    if (analysis.pattern !== 'INSUFFICIENT') {
-      const monthProgress = monthEnd.spentSoFar > 0 ? monthEnd.confidence : 0;
-      smartPredicted = analysis.avgMonthly * (1 - monthProgress * 0.6) + monthEnd.predicted * monthProgress * 0.6;
-      smartPredicted = Math.max(smartPredicted, monthEnd.spentSoFar);
+    if (analysis.pattern !== 'INSUFFICIENT' && monthEnd.spentSoFar > 0) {
+      const projected = Math.max(monthEnd.predicted, analysis.avgMonthly);
+      const remaining = Math.max(0, projected - monthEnd.spentSoFar);
+      smartPredicted = monthEnd.spentSoFar + remaining;
+    } else if (analysis.pattern !== 'INSUFFICIENT') {
+      smartPredicted = analysis.avgMonthly;
     }
+    smartPredicted = Math.max(smartPredicted, monthEnd.spentSoFar);
 
     predictions.incomes[cat.id] = {
       ...analysis,

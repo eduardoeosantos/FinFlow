@@ -99,6 +99,8 @@ export default function FinFlowApp() {
   const [showAddTx, setShowAddTx] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [chartHover, setChartHover] = useState(null);
+  const [categoryDetail, setCategoryDetail] = useState(null); // { catId, type }
+  const [quickCatTxId, setQuickCatTxId] = useState(null); // for quick icon-click category change
   const [forecastMonths, setForecastMonths] = useState(6);
   const [viewPeriod, setViewPeriod] = useState('monthly'); // monthly | quarterly | semiannual | annual
   const [viewMonth, setViewMonth] = useState(cm + 1); // 1-12
@@ -359,11 +361,11 @@ export default function FinFlowApp() {
   const navItems = [
     { id: 'dashboard', icon: '⬡', label: 'Dashboard' },
     { id: 'transactions', icon: '⇄', label: 'Lançamentos' },
-    { id: 'import', icon: '⤓', label: 'Importar' },
     { id: 'scan', icon: '◎', label: 'Escanear' },
+    { id: 'import', icon: '⤓', label: 'Importar' },
     { id: 'budget', icon: '◉', label: 'Orçamento' },
-    { id: 'forecast', icon: '◐', label: 'Forecast' },
     { id: 'patrimonio', icon: '◆', label: 'Patrimônio' },
+    { id: 'forecast', icon: '◐', label: 'Forecast' },
     { id: 'settings', icon: '⚙', label: 'Config.' },
   ];
 
@@ -377,7 +379,7 @@ export default function FinFlowApp() {
       <nav className="sidebar">
         <div className="sidebar-logo" style={{ padding: '0 24px', marginBottom: 40, display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 12, background: 'linear-gradient(135deg,#B24DFF,#00E5FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, boxShadow: '0 0 20px rgba(178,77,255,0.4)' }}>F</div>
-          <div><div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>FinFlow</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>v2.0</div></div>
+          <div><div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.5 }}>FinFlow</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>v2.3</div></div>
         </div>
         <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 12px', flex: 1 }}>
           {navItems.map(n => (
@@ -389,7 +391,7 @@ export default function FinFlowApp() {
           ))}
         </div>
         <div className="sidebar-footer" style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>FinFlow v2.0 — 2026<br />Powered by Claude AI</div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>FinFlow v2.3 — 2026<br />Powered by EOS Finance</div>
         </div>
       </nav>
 
@@ -418,7 +420,10 @@ export default function FinFlowApp() {
                 <h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Dashboard</h1>
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{today.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
               </div>
-              <button className="btn-primary" onClick={() => { setShowAddTx(true); setPage('transactions'); }}>+ Lançamento</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn-primary" onClick={() => { setShowAddTx(true); setPage('transactions'); }}>+ Lançamento</button>
+                <button className="btn-secondary" onClick={() => setPage('scan')} style={{ padding: '10px 18px', fontSize: 13 }}>📸 Escanear</button>
+              </div>
             </div>
             {/* ── Period Selector ── */}
             <div className="glass" style={{ padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -521,6 +526,7 @@ export default function FinFlowApp() {
                       <defs>
                         <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#69F0AE" stopOpacity="0.2" /><stop offset="100%" stopColor="#69F0AE" stopOpacity="0.01" /></linearGradient>
                         <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FF6B9D" stopOpacity="0.2" /><stop offset="100%" stopColor="#FF6B9D" stopOpacity="0.01" /></linearGradient>
+                        <linearGradient id="gRes" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#64B5F6" /><stop offset="100%" stopColor="#64B5F6" /></linearGradient>
                       </defs>
                       {/* Grid */}
                       {[0, 0.25, 0.5, 0.75, 1].map((p, i) => {
@@ -536,12 +542,8 @@ export default function FinFlowApp() {
                       {/* Lines */}
                       <path d={smoothPath(incomeData)} fill="none" stroke="#69F0AE" strokeWidth="2" strokeLinecap="round" />
                       <path d={smoothPath(expenseData)} fill="none" stroke="#FF6B9D" strokeWidth="2" strokeLinecap="round" />
-                      {/* Result line with color segments */}
-                      {resultData.map((v, i) => {
-                        if (i === 0) return null;
-                        const metTarget = budgetTargets[i] > 0 ? v >= budgetTargets[i] : v >= 0;
-                        return <line key={`r${i}`} x1={toX(i-1)} y1={toY(resultData[i-1])} x2={toX(i)} y2={toY(v)} stroke={metTarget ? '#64B5F6' : '#FF9800'} strokeWidth="2.5" strokeLinecap="round" />;
-                      })}
+                      {/* Result line - smooth curve */}
+                      <path d={smoothPath(resultData)} fill="none" stroke="url(#gRes)" strokeWidth="2.5" strokeLinecap="round" />
                       {/* Budget target dashed */}
                       <path d={smoothPath(budgetTargets)} fill="none" stroke="rgba(100,181,246,0.3)" strokeWidth="1.5" strokeDasharray="6 4" />
                       {/* Dots on result line */}
@@ -599,19 +601,18 @@ export default function FinFlowApp() {
                   const pct = budget > 0 ? (spent / budget) * 100 : (spent > 0 ? 100 : 0);
                   const predPct = budget > 0 ? Math.min((predicted / budget) * 100, 120) : 0;
                   const over = budget > 0 && spent > budget;
+                  const isOpen = categoryDetail?.catId === cat.id && categoryDetail?.type === 'expense';
+                  const catTxs = isOpen ? periodTx.filter(t => t.category === cat.id && t.type === 'expense') : [];
                   return (<div key={cat.id} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center', cursor: 'pointer' }} onClick={() => setCategoryDetail(isOpen ? null : { catId: cat.id, type: 'expense' })}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
                       <div style={{ textAlign: 'right' }}>
                         <span className="mono" style={{ fontSize: 12 }}><span style={{ color: over ? '#FF6B9D' : 'rgba(255,255,255,0.6)' }}>{formatBRL(spent)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                       </div>
                     </div>
                     <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 6, overflow: 'visible' }}>
-                      {/* Actual bar */}
                       <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: over ? 'linear-gradient(90deg,#FF6B9D88,#FF6B9D)' : 'linear-gradient(90deg,#B24DFF88,#B24DFF)', borderRadius: 6, transition: 'width 1s', position: 'relative', zIndex: 2 }} />
-                      {/* Prediction marker */}
                       {predicted > 0 && budget > 0 && <div title={`Previsão IA: ${formatBRL(predicted)}`} style={{ position: 'absolute', left: `${Math.min(predPct, 100)}%`, top: -2, width: 3, height: 12, background: '#FFD740', borderRadius: 2, zIndex: 3, opacity: 0.8 }} />}
-                      {/* Budget line dashed */}
                       {budget > 0 && <div style={{ position: 'absolute', left: '100%', top: -3, bottom: -3, width: 1, borderRight: '2px dashed rgba(255,255,255,0.15)', zIndex: 1 }} />}
                     </div>
                     {pred && pred.pattern !== 'INSUFFICIENT' && (
@@ -620,6 +621,24 @@ export default function FinFlowApp() {
                         <span style={{ color: pred.willMeetBudget === false ? '#FF9800' : pred.willMeetBudget === true ? '#69F0AE' : 'rgba(255,255,255,0.2)' }}>
                           {pred.willMeetBudget === false ? `⚠ Prev: ${formatBRL(predicted)}` : pred.willMeetBudget === true ? '✓ Dentro do orçamento' : ''}
                         </span>
+                      </div>
+                    )}
+                    {/* Category detail panel */}
+                    {isOpen && (
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(178,77,255,0.04)', border: '1px solid rgba(178,77,255,0.12)', borderRadius: 12, animation: 'fadeIn 0.2s ease' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>{catTxs.length} lançamentos no período</span>
+                          {pred && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Padrão: {pred.pattern} · Confiança: {Math.round((pred.confidence || 0) * 100)}%</span>}
+                        </div>
+                        {catTxs.slice(0, 8).map(tx => (
+                          <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: 12 }}>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: 8 }}>{tx.description}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.35)', marginRight: 12, flexShrink: 0 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                            <span className="mono" style={{ color: '#FF6B9D', flexShrink: 0 }}>{formatBRL(tx.amount)}</span>
+                          </div>
+                        ))}
+                        {catTxs.length > 8 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 6, textAlign: 'center' }}>+{catTxs.length - 8} lançamentos</div>}
+                        {pred?.monthEnd && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 8, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>Gasto até agora: {formatBRL(pred.monthEnd.spentSoFar)} · Previsão final: {formatBRL(predicted)} {budget > 0 ? `· ${over ? '🔴' : '🟢'} ${((spent / budget) * 100).toFixed(0)}% do orçamento` : ''}</div>}
                       </div>
                     )}
                   </div>);
@@ -635,9 +654,11 @@ export default function FinFlowApp() {
                   const predicted = pred?.smartPredicted || 0;
                   const pct = budget > 0 ? Math.min((received / budget) * 100, 100) : (received > 0 ? 100 : 0);
                   const predPct = budget > 0 ? Math.min((predicted / budget) * 100, 120) : 0;
+                  const isOpen = categoryDetail?.catId === cat.id && categoryDetail?.type === 'income';
+                  const catTxs = isOpen ? periodTx.filter(t => t.category === cat.id && t.type === 'income') : [];
                   return (<div key={cat.id} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, cursor: 'pointer' }} onClick={() => setCategoryDetail(isOpen ? null : { catId: cat.id, type: 'income' })}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
                       <span className="mono" style={{ fontSize: 12 }}><span style={{ color: '#69F0AE' }}>{formatBRL(received)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                     </div>
                     <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 6, overflow: 'visible' }}>
@@ -648,6 +669,19 @@ export default function FinFlowApp() {
                     {pred && pred.pattern !== 'INSUFFICIENT' && (
                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3 }}>
                         <span>🤖 {pred.details?.description || pred.pattern}</span>
+                      </div>
+                    )}
+                    {isOpen && (
+                      <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(105,240,174,0.04)', border: '1px solid rgba(105,240,174,0.12)', borderRadius: 12, animation: 'fadeIn 0.2s ease' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>{catTxs.length} lançamentos no período</div>
+                        {catTxs.slice(0, 8).map(tx => (
+                          <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: 12 }}>
+                            <span style={{ color: 'rgba(255,255,255,0.6)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: 8 }}>{tx.description}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.35)', marginRight: 12, flexShrink: 0 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                            <span className="mono" style={{ color: '#69F0AE', flexShrink: 0 }}>{formatBRL(tx.amount)}</span>
+                          </div>
+                        ))}
+                        {catTxs.length > 8 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 6, textAlign: 'center' }}>+{catTxs.length - 8} lançamentos</div>}
                       </div>
                     )}
                   </div>);
@@ -734,10 +768,10 @@ export default function FinFlowApp() {
                 <button className="btn-primary" onClick={handleAddManual}>✓ Lançar</button>
               </div>
             )}
-            {transactions.map(tx => { const cat = getCat(tx.category); const isEditing = editingTxId === tx.id; return (
-              <div key={tx.id}>
-                <div className="tx-row" style={{ cursor: 'pointer' }} onClick={() => setEditingTxId(isEditing ? null : tx.id)}>
-                  <div style={{ width: 40, height: 40, borderRadius: 14, background: isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(178,77,255,0.08)', border: `1px solid ${isEditing ? 'rgba(178,77,255,0.4)' : 'rgba(178,77,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, transition: 'all 0.2s' }}>{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
+            {transactions.map(tx => { const cat = getCat(tx.category); const isEditing = editingTxId === tx.id; const isQuickCat = quickCatTxId === tx.id; const sameCats = tx.type === 'income' ? incomeCats : expenseCats; return (
+              <div key={tx.id} style={{ position: 'relative' }}>
+                <div className="tx-row" style={{ cursor: 'pointer' }} onClick={() => { setQuickCatTxId(null); setEditingTxId(isEditing ? null : tx.id); }}>
+                  <div onClick={e => { e.stopPropagation(); setEditingTxId(null); setQuickCatTxId(isQuickCat ? null : tx.id); }} style={{ width: 40, height: 40, borderRadius: 14, background: isQuickCat ? 'rgba(178,77,255,0.25)' : isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(178,77,255,0.08)', border: `1px solid ${isQuickCat ? 'rgba(178,77,255,0.6)' : isEditing ? 'rgba(178,77,255,0.4)' : 'rgba(178,77,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, transition: 'all 0.2s', cursor: 'pointer' }} title="Alterar categoria">{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
@@ -745,6 +779,16 @@ export default function FinFlowApp() {
                   <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.type === 'transfer' ? '#B24DFF' : tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
                   <div style={{ fontSize: 14, opacity: 0.3, marginLeft: 8 }}>{isEditing ? '▾' : '✎'}</div>
                 </div>
+                {/* Quick category picker popup */}
+                {isQuickCat && (
+                  <div style={{ position: 'absolute', left: 0, top: 50, zIndex: 20, background: 'rgba(15,17,23,0.97)', border: '1px solid rgba(178,77,255,0.3)', borderRadius: 14, padding: 8, display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'fadeIn 0.15s ease' }}>
+                    {sameCats.map(c => (
+                      <button key={c.id} onClick={() => { updateTransaction(tx.id, { category: c.id }); setQuickCatTxId(null); notify(`Categoria: ${c.name}`); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 10, border: tx.category === c.id ? '1px solid rgba(178,77,255,0.5)' : '1px solid rgba(255,255,255,0.06)', background: tx.category === c.id ? 'rgba(178,77,255,0.15)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 12 }}>
+                        <span>{c.icon}</span><span>{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {isEditing && (
                   <div style={{ background: 'rgba(178,77,255,0.04)', border: '1px solid rgba(178,77,255,0.12)', borderRadius: '0 0 16px 16px', marginTop: -8, padding: '16px 16px 12px', animation: 'fadeIn 0.2s ease' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -1141,13 +1185,29 @@ export default function FinFlowApp() {
               <div style={{ position: 'relative', height: 220 }}>
                 {(() => {
                   const data = fd.forecast.slice(0, forecastMonths), maxB = Math.max(...data.map(d => d.balance)), minB = Math.min(...data.map(d => d.balance), 0), range = maxB - minB || 1;
-                  const pts = data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - ((d.balance - minB) / range) * 100}`).join(' ');
+                  const W = 400, H = 100, padL = 5, padR = 5;
+                  const toX = (i) => padL + (i / (data.length - 1)) * (W - padL - padR);
+                  const toY = (v) => 5 + (1 - (v - minB) / range) * (H - 10);
+                  const pts = data.map((d, i) => ({ x: toX(i), y: toY(d.balance) }));
+                  // Smooth curve
+                  let pathD = `M ${pts[0].x} ${pts[0].y}`;
+                  for (let i = 0; i < pts.length - 1; i++) {
+                    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+                    const t = 0.35;
+                    pathD += ` C ${p1.x + (p2.x - p0.x) * t} ${p1.y + (p2.y - p0.y) * t}, ${p2.x - (p3.x - p1.x) * t} ${p2.y - (p3.y - p1.y) * t}, ${p2.x} ${p2.y}`;
+                  }
+                  const areaD = `${pathD} L ${pts[pts.length-1].x} ${H} L ${pts[0].x} ${H} Z`;
                   return (
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-                      <defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#B24DFF" stopOpacity="0.25" /><stop offset="100%" stopColor="#00E5FF" stopOpacity="0.01" /></linearGradient><linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#B24DFF" /><stop offset="100%" stopColor="#00E5FF" /></linearGradient></defs>
-                      <polygon points={pts + ' 100,100 0,100'} fill="url(#fg)" />
-                      <polyline points={pts} fill="none" stroke="url(#lg)" strokeWidth="0.7" strokeLinecap="round" />
-                      {data.map((d, i) => { const x = (i / (data.length - 1)) * 100, y = 100 - ((d.balance - minB) / range) * 100; return <circle key={i} cx={x} cy={y} r="1.3" fill="#00E5FF" style={{ filter: 'drop-shadow(0 0 4px #00E5FF)' }} />; })}
+                    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                      <defs>
+                        <linearGradient id="fg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#B24DFF" stopOpacity="0.25" /><stop offset="100%" stopColor="#00E5FF" stopOpacity="0.02" /></linearGradient>
+                        <linearGradient id="lg2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#B24DFF" /><stop offset="100%" stopColor="#00E5FF" /></linearGradient>
+                      </defs>
+                      <path d={areaD} fill="url(#fg2)" />
+                      <path d={pathD} fill="none" stroke="url(#lg2)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      {pts.map((p, i) => (
+                        <circle key={i} cx={p.x} cy={p.y} r="2" fill="#0F1117" stroke="#00E5FF" strokeWidth="1" style={{ filter: 'drop-shadow(0 0 3px rgba(0,229,255,0.5))' }} />
+                      ))}
                     </svg>
                   );
                 })()}
