@@ -70,7 +70,7 @@ function EditModal({ title, children, onClose }) {
       <div className="glass" style={{ position: 'relative', width: '90%', maxWidth: 500, maxHeight: '85vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}>×</button>
         </div>
         {children}
       </div>
@@ -146,7 +146,7 @@ export default function FinFlowApp() {
       if (d.importHistory) setImportHistory(d.importHistory);
       setHasSampleData(!!d.isSampleData);
     } else {
-      setBankAccounts([{ id: 'acc1', name: 'Nubank', icon: '💜', balance: 4523.87, initialBalance: 4523.87, color: '#B24DFF' }, { id: 'acc2', name: 'Banco do Brasil', icon: '🟡', balance: 12350, initialBalance: 12350, color: '#FFD740' }]);
+      setBankAccounts([{ id: 'acc1', name: 'Nubank', icon: 'card', balance: 4523.87, initialBalance: 4523.87, color: '#B24DFF' }, { id: 'acc2', name: 'Banco do Brasil', icon: 'bank', balance: 12350, initialBalance: 12350, color: '#FFD740' }]);
       setTransactions(generateSampleData());
       setHasSampleData(true);
     }
@@ -330,7 +330,7 @@ export default function FinFlowApp() {
   const confirmScan = () => { if (scanResult) { const extra = {}; if (scanResult.cardId) extra.cardId = scanResult.cardId; else if (scanResult.accountId) extra.accountId = scanResult.accountId; addTransaction({ description: scanResult.description, amount: scanResult.amount, category: scanResult.category, type: scanResult.type || 'expense', date: scanResult.date || todayStr, ...extra }); setScanResult(null); notify('Lançado!'); } };
 
   // ─── IMPORT ───
-  const handleImportFile = async (file) => { if (!file) return; setImporting(true); try { const parsed = await parseImportFile(file); const checked = detectDuplicates(parsed, transactions); const dupeCount = checked.filter(t => t.isDuplicate).length; setImportStaging(prev => [...prev, ...checked]); notify(`${parsed.length} transações importadas!${dupeCount > 0 ? ` ⚠️ ${dupeCount} possíveis duplicatas.` : ''}`); } catch (err) { notify(err.message, 'error'); } setImporting(false); };
+  const handleImportFile = async (file) => { if (!file) return; setImporting(true); try { const parsed = await parseImportFile(file); const checked = detectDuplicates(parsed, transactions); const dupeCount = checked.filter(t => t.isDuplicate).length; setImportStaging(prev => [...prev, ...checked]); notify(`${parsed.length} transações importadas!${dupeCount > 0 ? ` ${dupeCount} possíveis duplicatas.` : ''}`); } catch (err) { notify(err.message, 'error'); } setImporting(false); };
   const handleImportDrop = (e) => { e.preventDefault(); setImportDragActive(false); handleImportFile(e.dataTransfer?.files?.[0]); };
   const updateStagingItem = (id, updates) => setImportStaging(prev => prev.map(tx => tx.id === id ? { ...tx, ...updates } : tx));
   const approveAll = () => setImportStaging(prev => prev.map(tx => tx.importStatus === 'pending' ? { ...tx, importStatus: 'approved' } : tx));
@@ -377,7 +377,7 @@ export default function FinFlowApp() {
   return (
     <div className="app-layout">
       <BgMesh />
-      {notification && (<div style={{ position: 'fixed', top: 24, right: 24, zIndex: 100, animation: 'notifSlide 0.4s cubic-bezier(0.16,1,0.3,1)' }}><div className="glass" style={{ padding: '14px 24px', borderColor: notification.type === 'error' ? 'rgba(255,107,157,0.3)' : 'rgba(105,240,174,0.3)' }}><span style={{ fontSize: 13, fontWeight: 500 }}>{notification.type === 'error' ? '⚠️' : '✅'} {notification.msg}</span></div></div>)}
+      {notification && (<div style={{ position: 'fixed', top: 24, right: 24, zIndex: 100, animation: 'notifSlide 0.4s cubic-bezier(0.16,1,0.3,1)' }}><div className="glass" style={{ padding: '14px 24px', borderColor: notification.type === 'error' ? 'rgba(255,107,157,0.3)' : 'rgba(105,240,174,0.3)', display: 'flex', alignItems: 'center', gap: 8 }}>{notification.type === 'error' ? <GlassIcon icon="zap" size={16} color="#FF6B9D" /> : <GlassIcon icon="check" size={16} color="#69F0AE" />}<span style={{ fontSize: 13, fontWeight: 500 }}>{notification.msg}</span></div></div>)}
       {showIconPicker && <IconPicker value={showIconPicker.value} onChange={showIconPicker.onChange} onClose={() => setShowIconPicker(null)} />}
 
       {/* SIDEBAR */}
@@ -415,9 +415,9 @@ export default function FinFlowApp() {
           <div className="stagger">
             {hasSampleData && (
               <div className="glass" style={{ marginBottom: 20, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, borderColor: 'rgba(255,215,64,0.3)', background: 'rgba(255,215,64,0.05)' }}>
-                <span style={{ fontSize: 20 }}>⚠️</span>
+                <span style={{ fontSize: 20 }}></span>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: '#FFD740' }}>Dados de exemplo</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Limpe para começar com seus dados reais.</div></div>
-                <button className="btn-danger" onClick={clearAllData}>🗑 Limpar</button>
+                <button className="btn-danger" onClick={clearAllData}>Limpar</button>
               </div>
             )}
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -427,7 +427,7 @@ export default function FinFlowApp() {
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn-primary" onClick={() => { setShowAddTx(true); setPage('transactions'); }}>+ Lançamento</button>
-                <button className="btn-secondary" onClick={() => setPage('scan')} style={{ padding: '10px 18px', fontSize: 13 }}>📸 Escanear</button>
+                <button className="btn-secondary" onClick={() => setPage('scan')} style={{ padding: '10px 18px', fontSize: 13 }}>Escanear</button>
               </div>
             </div>
             {/* ── Period Selector ── */}
@@ -473,7 +473,7 @@ export default function FinFlowApp() {
                 { label: `Receita · ${periodLabel()}`, value: formatBRL(periodIncome), color: '#69F0AE', sub: budgetIncTotal > 0 ? `Meta: ${formatBRL(budgetIncTotal)} (${periodIncome > 0 ? ((periodIncome / budgetIncTotal) * 100).toFixed(0) : 0}%)` : 'Sem meta' },
                 { label: `Despesa · ${periodLabel()}`, value: formatBRL(periodExpense), color: '#FF6B9D', sub: budgetExpTotal > 0 ? `Orçamento: ${formatBRL(budgetExpTotal)} (${budgetExpTotal > 0 ? ((periodExpense / budgetExpTotal) * 100).toFixed(0) : 0}%)` : 'Sem orçamento' },
                 { label: 'Resultado', value: formatBRL(periodIncome - periodExpense), color: periodIncome - periodExpense >= 0 ? '#69F0AE' : '#FF6B9D', sub: periodIncome > 0 ? `Economia: ${((1 - periodExpense / periodIncome) * 100).toFixed(1)}%` : '—' },
-                { label: 'Meta de Economia', value: budgetIncTotal > 0 && budgetExpTotal > 0 ? formatBRL(budgetIncTotal - budgetExpTotal) : '—', color: '#64B5F6', sub: budgetIncTotal > 0 && budgetExpTotal > 0 ? ((periodIncome - periodExpense) >= (budgetIncTotal - budgetExpTotal) ? '✅ Meta atingida' : `⚠️ Faltam ${formatBRL((budgetIncTotal - budgetExpTotal) - (periodIncome - periodExpense))}`) : 'Configure orçamentos' },
+                { label: 'Meta de Economia', value: budgetIncTotal > 0 && budgetExpTotal > 0 ? formatBRL(budgetIncTotal - budgetExpTotal) : '—', color: '#64B5F6', sub: budgetIncTotal > 0 && budgetExpTotal > 0 ? ((periodIncome - periodExpense) >= (budgetIncTotal - budgetExpTotal) ? 'Meta atingida' : `Faltam ${formatBRL((budgetIncTotal - budgetExpTotal) - (periodIncome - periodExpense))}`) : 'Configure orçamentos' },
               ].map((k, i) => (
                 <div key={i} className="glass hoverable" style={{ position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${k.color},transparent)`, opacity: 0.6 }} />
@@ -485,7 +485,7 @@ export default function FinFlowApp() {
             </div>
             {/* ══ EVOLUÇÃO MENSAL ══ */}
             <div className="glass" style={{ marginBottom: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>📊 Evolução Mensal</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>{renderIcon('chart_up', 16)} Evolução Mensal</h3>
               {(() => {
                 const rawData = fd.monthlyData.slice(-8);
                 if (rawData.length < 2) return <p style={{ color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: 20 }}>Dados insuficientes</p>;
@@ -578,12 +578,12 @@ export default function FinFlowApp() {
                         <div style={{ color: '#FF6B9D', marginBottom: 3 }}>Despesa: {formatBRL(expenseData[hIdx])}</div>
                         <div style={{ color: resultData[hIdx] >= 0 ? '#69F0AE' : '#FF6B9D', fontWeight: 600, marginBottom: 3 }}>Resultado: {formatBRL(resultData[hIdx])}</div>
                         {budgetTargets[hIdx] !== 0 && <div style={{ color: '#64B5F6', fontSize: 11 }}>Meta: {formatBRL(budgetTargets[hIdx])}</div>}
-                        {budgetTargets[hIdx] > 0 && <div style={{ fontSize: 11, marginTop: 3, color: resultData[hIdx] >= budgetTargets[hIdx] ? '#69F0AE' : '#FF9800' }}>{resultData[hIdx] >= budgetTargets[hIdx] ? '✅ Meta atingida' : '⚠️ Abaixo da meta'}</div>}
+                        {budgetTargets[hIdx] > 0 && <div style={{ fontSize: 11, marginTop: 3, color: resultData[hIdx] >= budgetTargets[hIdx] ? '#69F0AE' : '#FF9800' }}>{resultData[hIdx] >= budgetTargets[hIdx] ? 'Meta atingida' : 'Abaixo da meta'}</div>}
                       </div>
                     )}
                     {/* Legend */}
                     <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-                      {[{c:'#69F0AE',l:'Receita'},{c:'#FF6B9D',l:'Despesa'},{c:'#64B5F6',l:'Resultado (meta ✓)',s:'solid'},{c:'#FF9800',l:'Resultado (abaixo)',s:'solid'},{c:'rgba(100,181,246,0.5)',l:'Meta economia',s:'dashed'}].map((x,i)=>(
+                      {[{c:'#69F0AE',l:'Receita'},{c:'#FF6B9D',l:'Despesa'},{c:'#64B5F6',l:'Resultado (meta)',s:'solid'},{c:'#FF9800',l:'Resultado (abaixo)',s:'solid'},{c:'rgba(100,181,246,0.5)',l:'Meta economia',s:'dashed'}].map((x,i)=>(
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <div style={{ width: 14, height: 2, background: x.c, borderBottom: x.s === 'dashed' ? '2px dashed' : 'none', borderColor: x.c }} />
                           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{x.l}</span>
@@ -597,7 +597,7 @@ export default function FinFlowApp() {
             {/* ══ DESPESAS vs ORÇAMENTO + PREVISÃO IA ══ */}
             <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
               <div className="glass">
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>📉 Despesas vs Orçamento</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>{renderIcon('chart_bar', 16, '#FF6B9D')} Despesas vs Orçamento</h3>
                 {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).sort((a, b) => (catExpenses[b.id] || 0) - (catExpenses[a.id] || 0)).slice(0, 6).map(cat => {
                   const spent = catExpenses[cat.id] || 0;
                   const budget = getCatBudgetRange(cat, periodMonths);
@@ -622,9 +622,9 @@ export default function FinFlowApp() {
                     </div>
                     {pred && pred.pattern !== 'INSUFFICIENT' && (
                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
-                        <span>🤖 {pred.details?.description || pred.pattern}</span>
+                        <span>{pred.details?.description || pred.pattern}</span>
                         <span style={{ color: pred.willMeetBudget === false ? '#FF9800' : pred.willMeetBudget === true ? '#69F0AE' : 'rgba(255,255,255,0.2)' }}>
-                          {pred.willMeetBudget === false ? `⚠ Prev: ${formatBRL(predicted)}` : pred.willMeetBudget === true ? '✓ Dentro do orçamento' : ''}
+                          {pred.willMeetBudget === false ? `Prev: ${formatBRL(predicted)}` : pred.willMeetBudget === true ? 'Dentro do orçamento' : ''}
                         </span>
                       </div>
                     )}
@@ -643,7 +643,7 @@ export default function FinFlowApp() {
                           </div>
                         ))}
                         {catTxs.length > 8 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 6, textAlign: 'center' }}>+{catTxs.length - 8} lançamentos</div>}
-                        {pred?.monthEnd && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 8, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>Gasto até agora: {formatBRL(pred.monthEnd.spentSoFar)} · Previsão final: {formatBRL(predicted)} {budget > 0 ? `· ${over ? '🔴' : '🟢'} ${((spent / budget) * 100).toFixed(0)}% do orçamento` : ''}</div>}
+                        {pred?.monthEnd && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 8, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>Gasto até agora: {formatBRL(pred.monthEnd.spentSoFar)} · Previsão final: {formatBRL(predicted)} {budget > 0 ? `· ${((spent / budget) * 100).toFixed(0)}% do orçamento` : ''}</div>}
                       </div>
                     )}
                   </div>);
@@ -651,7 +651,7 @@ export default function FinFlowApp() {
                 {expenseCats.filter(c => catExpenses[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
               </div>
               <div className="glass">
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>📈 Receitas vs Previsão</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 16 }}>{renderIcon('trending', 16, '#69F0AE')} Receitas vs Previsão</h3>
                 {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).map(cat => {
                   const received = catIncomes[cat.id] || 0;
                   const budget = getCatBudgetRange(cat, periodMonths);
@@ -673,7 +673,7 @@ export default function FinFlowApp() {
                     </div>
                     {pred && pred.pattern !== 'INSUFFICIENT' && (
                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 3 }}>
-                        <span>🤖 {pred.details?.description || pred.pattern}</span>
+                        <span>{pred.details?.description || pred.pattern}</span>
                       </div>
                     )}
                     {isOpen && (
@@ -721,13 +721,13 @@ export default function FinFlowApp() {
           <div style={{ animation: 'fadeIn 0.4s ease' }}>
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
               <div><h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Lançamentos</h1></div>
-              <button className="btn-primary" onClick={() => setShowAddTx(!showAddTx)}>{showAddTx ? '✕ Fechar' : '+ Novo'}</button>
+              <button className="btn-primary" onClick={() => setShowAddTx(!showAddTx)}>{showAddTx ? 'Fechar' : '+ Novo'}</button>
             </div>
             {showAddTx && (
               <div className="glass" style={{ marginBottom: 24 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Novo Lançamento</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  {[{v:'expense',l:'💸 Despesa'},{v:'income',l:'💰 Receita'},{v:'transfer',l:'🔄 Transferência'},{v:'card_payment',l:'💳 Pagar Fatura'}].map(t=>(
+                  {[{v:'expense',l:'Despesa'},{v:'income',l:'Receita'},{v:'transfer',l:'Transferência'},{v:'card_payment',l:'Pagar Fatura'}].map(t=>(
                     <button key={t.v} onClick={()=>setNewTx({...newTx, type: t.v})} style={{ padding: '10px 10px', borderRadius: 12, border: newTx.type===t.v ? '1px solid #B24DFF':'1px solid rgba(255,255,255,0.08)', background: newTx.type===t.v ? 'rgba(178,77,255,0.12)':'rgba(255,255,255,0.03)', color:'rgba(255,255,255,0.8)', cursor:'pointer', fontSize:12, fontWeight: newTx.type===t.v ? 600:400 }}>{t.l}</button>
                   ))}
                 </div>
@@ -740,11 +740,11 @@ export default function FinFlowApp() {
                   {newTx.type === 'transfer' ? (
                     <>
                       <select className="glass-input" value={newTx.fromAccountId} onChange={e => setNewTx({...newTx, fromAccountId: e.target.value})}>
-                        <option value="">📤 Conta de origem...</option>
+                        <option value="">Conta de origem...</option>
                         {bankAccounts.map(a => (<option key={a.id} value={a.id}>{iconText(a.icon)} {a.name} ({formatBRL(a.balance)})</option>))}
                       </select>
                       <select className="glass-input" value={newTx.toAccountId} onChange={e => setNewTx({...newTx, toAccountId: e.target.value})}>
-                        <option value="">📥 Conta de destino...</option>
+                        <option value="">Conta de destino...</option>
                         {bankAccounts.filter(a => a.id !== newTx.fromAccountId).map(a => (<option key={a.id} value={a.id}>{iconText(a.icon)} {a.name} ({formatBRL(a.balance)})</option>))}
                       </select>
                     </>
@@ -770,7 +770,7 @@ export default function FinFlowApp() {
                     </>
                   )}
                 </div>
-                <button className="btn-primary" onClick={handleAddManual}>✓ Lançar</button>
+                <button className="btn-primary" onClick={handleAddManual}>Lançar</button>
               </div>
             )}
             {transactions.map(tx => { const cat = getCat(tx.category); const isEditing = editingTxId === tx.id; const isQuickCat = quickCatTxId === tx.id; const sameCats = tx.type === 'income' ? incomeCats : expenseCats; return (
@@ -782,7 +782,7 @@ export default function FinFlowApp() {
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
                   </div>
                   <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.type === 'transfer' ? '#B24DFF' : tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
-                  <div style={{ fontSize: 14, opacity: 0.3, marginLeft: 8 }}>{isEditing ? '▾' : '✎'}</div>
+                  <div style={{ opacity: 0.3, marginLeft: 8 }}>{isEditing ? '▾' : <GlassIcon icon="pencil" size={13} color="rgba(255,255,255,0.5)" />}</div>
                 </div>
                 {/* Quick category picker popup */}
                 {isQuickCat && (
@@ -814,7 +814,7 @@ export default function FinFlowApp() {
                       <div>
                         <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Tipo</label>
                         <select className="glass-input" value={tx.type} onChange={e => updateTransaction(tx.id, { type: e.target.value })} style={{ fontSize: 12 }}>
-                          <option value="expense">💸 Despesa</option><option value="income">💰 Receita</option><option value="transfer">🔄 Transferência</option><option value="card_payment">💳 Pagar Fatura</option>
+                          <option value="expense">Despesa</option><option value="income">Receita</option><option value="transfer">Transferência</option><option value="card_payment">Pagar Fatura</option>
                         </select>
                       </div>
                       <div>
@@ -838,14 +838,14 @@ export default function FinFlowApp() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <button onClick={() => { if (confirm('Excluir este lançamento?')) deleteTransaction(tx.id); }} style={{ background: 'none', border: '1px solid rgba(255,77,77,0.25)', color: '#FF6B9D', padding: '6px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12 }}>🗑 Excluir</button>
-                      <button onClick={() => { setEditingTxId(null); notify('Salvo!'); }} className="btn-primary" style={{ padding: '6px 20px', fontSize: 12 }}>✓ Fechar</button>
+                      <button onClick={() => { if (confirm('Excluir este lançamento?')) deleteTransaction(tx.id); }} style={{ background: 'none', border: '1px solid rgba(255,77,77,0.25)', color: '#FF6B9D', padding: '6px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12 }}>Excluir</button>
+                      <button onClick={() => { setEditingTxId(null); notify('Salvo!'); }} className="btn-primary" style={{ padding: '6px 20px', fontSize: 12 }}>Fechar</button>
                     </div>
                   </div>
                 )}
               </div>
             ); })}
-            {transactions.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📋</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum lançamento ainda</p></div>}
+            {transactions.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ opacity: 0.3, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>{renderIcon('nav_list', 40, 'rgba(255,255,255,0.3)')}</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum lançamento ainda</p></div>}
           </div>
         )}
 
@@ -854,13 +854,13 @@ export default function FinFlowApp() {
           <div style={{ animation: 'fadeIn 0.4s ease' }}>
             <div style={{ marginBottom: 28 }}><h1 className="page-title gradient-text" style={{ fontSize: 30, fontWeight: 700, letterSpacing: -1 }}>Importar Extrato</h1></div>
             <div className={`glass dropzone ${importDragActive ? 'drag-active' : ''}`} style={{ textAlign: 'center', padding: '48px 32px', marginBottom: 24, cursor: 'pointer' }} onClick={() => importRef.current?.click()} onDragOver={e => { e.preventDefault(); setImportDragActive(true); }} onDragLeave={() => setImportDragActive(false)} onDrop={handleImportDrop}>
-              {importing ? (<><div className="loader" /><p style={{ marginTop: 16, color: 'rgba(255,255,255,0.5)' }}>Processando...</p></>) : (<><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>⤓</div><p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Arraste seu extrato aqui</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Suporta CSV, XLSX (Excel/Santander), OFX/QFX</p></>)}
+              {importing ? (<><div className="loader" /><p style={{ marginTop: 16, color: 'rgba(255,255,255,0.5)' }}>Processando...</p></>) : (<><div style={{ opacity: 0.3, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>{renderIcon('nav_down', 48, 'rgba(255,255,255,0.3)')}</div><p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Arraste seu extrato aqui</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Suporta CSV, XLSX (Excel/Santander), OFX/QFX</p></>)}
             </div>
             {importStaging.length > 0 && (
               <>
               {/* Source Selection */}
               <div className="glass" style={{ marginBottom: 16, padding: '16px 20px' }}>
-                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'rgba(255,255,255,0.7)' }}>🏦 De onde veio este extrato?</h4>
+                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'rgba(255,255,255,0.7)' }}>{renderIcon('bank', 16)} De onde veio este extrato?</h4>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   {creditCards.length > 0 && (
                     <div style={{ flex: 1, minWidth: 200 }}>
@@ -883,7 +883,7 @@ export default function FinFlowApp() {
                 </div>
                 {importStaging[0]?.cardLabel && !importCardId && (
                   <div style={{ marginTop: 8, fontSize: 12, color: '#FFD740', padding: '6px 10px', background: 'rgba(255,215,64,0.06)', borderRadius: 8 }}>
-                    💳 Fatura de cartão detectada ({importStaging[0].cardLabel}). Selecione o cartão acima para vincular.
+                    Fatura de cartão detectada ({importStaging[0].cardLabel}). Selecione o cartão acima para vincular.
                   </div>
                 )}
               </div>
@@ -893,12 +893,12 @@ export default function FinFlowApp() {
                   <div>
                     <h3 style={{ fontSize: 15, fontWeight: 600 }}>Revisão ({importStaging.length} transações)</h3>
                     {importStaging.filter(t => t.isDuplicate).length > 0 && (
-                      <div style={{ fontSize: 12, color: '#FFD740', marginTop: 4 }}>⚠️ {importStaging.filter(t => t.isDuplicate).length} possíveis duplicatas encontradas</div>
+                      <div style={{ fontSize: 12, color: '#FFD740', marginTop: 4 }}>{importStaging.filter(t => t.isDuplicate).length} possíveis duplicatas encontradas</div>
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn-secondary" onClick={approveAll}>✓ Aprovar {pendingCount}</button>
-                    <button className="btn-secondary" onClick={rejectAll}>✕ Rejeitar</button>
+                    <button className="btn-secondary" onClick={approveAll}>Aprovar {pendingCount}</button>
+                    <button className="btn-secondary" onClick={rejectAll}>Rejeitar</button>
                     <button className="btn-primary" onClick={confirmImport} disabled={approvedCount === 0}>Importar {approvedCount}</button>
                   </div>
                 </div>
@@ -909,14 +909,14 @@ export default function FinFlowApp() {
                     return (
                     <div key={tx.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: tx.isDuplicate ? 'rgba(255,215,64,0.03)' : 'transparent' }}>
                       <div className="import-row" style={{ display: 'grid', gridTemplateColumns: '70px 24px 2fr 1fr 1.2fr 100px', gap: 8, padding: '10px 0', alignItems: 'center' }}>
-                        <span className={`badge badge-${tx.importStatus}`} style={{ fontSize: 11 }}>{tx.importStatus === 'approved' ? '✓ OK' : tx.importStatus === 'rejected' ? '✕ Não' : '⏳ ...'}</span>
-                        <span title={tx.isDuplicate ? `Possível duplicata: ${tx.duplicateOf}` : ''} style={{ fontSize: 14, cursor: tx.isDuplicate ? 'help' : 'default', textAlign: 'center' }}>{tx.isDuplicate ? '⚠️' : ''}</span>
+                        <span className={`badge badge-${tx.importStatus}`} style={{ fontSize: 11 }}>{tx.importStatus === 'approved' ? 'OK' : tx.importStatus === 'rejected' ? 'Não' : '...'}</span>
+                        <span title={tx.isDuplicate ? `Possível duplicata: ${tx.duplicateOf}` : ''} style={{ cursor: tx.isDuplicate ? 'help' : 'default', textAlign: 'center' }}>{tx.isDuplicate ? <GlassIcon icon="zap" size={14} color="#FFD740" /> : ''}</span>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                           <div style={{ fontSize: 11, color: tx.isDuplicate ? '#FFD740' : 'rgba(255,255,255,0.3)' }}>
                             {new Date(tx.date+'T12:00:00').toLocaleDateString('pt-BR')}
-                            {tx.cardLabel ? ` · 💳 ${tx.cardLabel}` : ''}
-                            {tx.isDuplicate ? ` · ⚠ ${tx.duplicateOf}` : ''}
+                            {tx.cardLabel ? ` · ${tx.cardLabel}` : ''}
+                            {tx.isDuplicate ? ` · ${tx.duplicateOf}` : ''}
                           </div>
                         </div>
                         <span className="mono" style={{ fontSize: 13, color: tx.amount >= 0 ? '#69F0AE' : '#FF6B9D', fontWeight: 600 }}>{formatBRL(tx.amount)}</span>
@@ -928,9 +928,9 @@ export default function FinFlowApp() {
                           </select>
                         </div>
                         <div style={{ display: 'flex', gap: 3 }}>
-                          <button title="Editar" onClick={() => setEditingImportId(isEditing ? null : tx.id)} style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>✏️</button>
-                          <button className="btn-success" onClick={() => updateStagingItem(tx.id, { importStatus: 'approved' })} style={{ padding: '5px 8px', fontSize: 12 }}>✓</button>
-                          <button className="btn-danger" onClick={() => updateStagingItem(tx.id, { importStatus: 'rejected' })} style={{ padding: '5px 8px', fontSize: 12 }}>✕</button>
+                          <button title="Editar" onClick={() => setEditingImportId(isEditing ? null : tx.id)} style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>⌂</button>
+                          <button className="btn-success" onClick={() => updateStagingItem(tx.id, { importStatus: 'approved' })} style={{ padding: '5px 8px', fontSize: 12 }}>OK</button>
+                          <button className="btn-danger" onClick={() => updateStagingItem(tx.id, { importStatus: 'rejected' })} style={{ padding: '5px 8px', fontSize: 12 }}>×</button>
                         </div>
                       </div>
                       {isEditing && (
@@ -978,20 +978,20 @@ export default function FinFlowApp() {
             <div className="glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 340 }}>
               {!apiKey ? (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 56, opacity: 0.3, marginBottom: 16 }}>🔑</div>
+                  <div style={{ fontSize: 56, opacity: 0.3, marginBottom: 16 }}></div>
                   <p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>API Key necessária</p>
                   <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 24 }}>Configure em Configurações</p>
-                  <button className="btn-primary" onClick={() => setPage('settings')}>⚙ Configurar</button>
+                  <button className="btn-primary" onClick={() => setPage('settings')}>Configurar</button>
                 </div>
               ) : scanning ? (
                 <div style={{ textAlign: 'center' }}>
                   <div className="loader" />
-                  <p style={{ marginTop: 20, fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>🤖 Analisando recibo com IA...</p>
+                  <p style={{ marginTop: 20, fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{renderIcon('sparkle', 16)} Analisando recibo com IA...</p>
                   <p style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Extraindo dados automaticamente</p>
                 </div>
               ) : scanResult ? (
                 <div style={{ width: '100%' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, textAlign: 'center' }}>✅ Resultado — Edite se necessário</h3>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, textAlign: 'center' }}>{renderIcon('check', 16, '#69F0AE')} Resultado — Edite se necessário</h3>
                   <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
                     <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Descrição</label><input className="glass-input" value={scanResult.description} onChange={e => setScanResult(p => ({ ...p, description: e.target.value }))} /></div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1007,7 +1007,7 @@ export default function FinFlowApp() {
                         </select>
                       </div>
                     </div>
-                    <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>🏦 Pago com</label>
+                    <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>{renderIcon('bank', 14)} Pago com</label>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         <select className="glass-input" value={scanResult.cardId || ''} onChange={e => setScanResult(p => ({ ...p, cardId: e.target.value, accountId: e.target.value ? '' : p.accountId }))}>
                           <option value="">Cartão: nenhum</option>
@@ -1021,19 +1021,19 @@ export default function FinFlowApp() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 12 }}>
-                    <button className="btn-primary" onClick={confirmScan} style={{ flex: 1 }}>✓ Confirmar</button>
+                    <button className="btn-primary" onClick={confirmScan} style={{ flex: 1 }}>Confirmar</button>
                     <button className="btn-secondary" onClick={() => setScanResult(null)} style={{ flex: 1 }}>↻ Nova foto</button>
                   </div>
                 </div>
               ) : (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 56, opacity: 0.3, marginBottom: 16 }}>📸</div>
+                  <div style={{ opacity: 0.3, marginBottom: 16, display: 'flex', justifyContent: 'center' }}>{renderIcon('camera', 56, 'rgba(255,255,255,0.3)')}</div>
                   <p style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Escanear Recibo</p>
                   <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 24 }}>Cupons fiscais, recibos, notas</p>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                    <button className="btn-primary" onClick={() => fileRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>📷 Tirar Foto</button>
+                    <button className="btn-primary" onClick={() => fileRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>Tirar Foto</button>
                     <input ref={galleryRef} type="file" accept="image/*" onChange={handlePhotoCapture} style={{ display: 'none' }} />
-                    <button className="btn-secondary" onClick={() => galleryRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>🖼 Selecionar Imagem</button>
+                    <button className="btn-secondary" onClick={() => galleryRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>Selecionar Imagem</button>
                   </div>
                 </div>
               )}
@@ -1066,13 +1066,13 @@ export default function FinFlowApp() {
             {/* Summary cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
               {[
-                { l: 'Orçamento Despesas', v: budgetExpTotal, c: '#FF6B9D', i: '📉' },
-                { l: 'Realizado Despesas', v: periodExpense, c: periodExpense > budgetExpTotal && budgetExpTotal > 0 ? '#FF6B9D' : '#B24DFF', i: '💸' },
-                { l: 'Previsão Receitas', v: budgetIncTotal, c: '#69F0AE', i: '📈' },
-                { l: 'Realizado Receitas', v: periodIncome, c: '#69F0AE', i: '💰' },
+                { l: 'Orçamento Despesas', v: budgetExpTotal, c: '#FF6B9D', i: 'chart_bar' },
+                { l: 'Realizado Despesas', v: periodExpense, c: periodExpense > budgetExpTotal && budgetExpTotal > 0 ? '#FF6B9D' : '#B24DFF', i: 'money' },
+                { l: 'Previsão Receitas', v: budgetIncTotal, c: '#69F0AE', i: 'trending' },
+                { l: 'Realizado Receitas', v: periodIncome, c: '#69F0AE', i: 'coins' },
               ].map((k, i) => (
                 <div key={i} className="glass" style={{ textAlign: 'center', padding: 16 }}>
-                  <div style={{ fontSize: 18, marginBottom: 6 }}>{k.i}</div>
+                  <div style={{ fontSize: 18, marginBottom: 6 }}>{renderIcon(k.i, 20)}</div>
                   <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{k.l}</div>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: k.c }}>{formatBRL(k.v)}</div>
                 </div>
@@ -1080,8 +1080,8 @@ export default function FinFlowApp() {
             </div>
             {/* Expense / Income tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              <button className={`chip ${budgetTab==='expense'?'active':''}`} onClick={()=>setBudgetTab('expense')}>📉 Despesas</button>
-              <button className={`chip ${budgetTab==='income'?'active':''}`} onClick={()=>setBudgetTab('income')}>📈 Receitas</button>
+              <button className={`chip ${budgetTab==='expense'?'active':''}`} onClick={()=>setBudgetTab('expense')}>{renderIcon('chart_bar', 14, '#FF6B9D')} Despesas</button>
+              <button className={`chip ${budgetTab==='income'?'active':''}`} onClick={()=>setBudgetTab('income')}>{renderIcon('trending', 14, '#69F0AE')} Receitas</button>
             </div>
 
             {budgetTab === 'expense' && (
@@ -1098,14 +1098,14 @@ export default function FinFlowApp() {
                         <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>{renderIcon(cat.icon, 22)}</span>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
-                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Orçamento anual' : '🔁 Orçamento mensal'}</div>
+                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? 'Orçamento anual' : 'Orçamento mensal'}</div>
                       <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: over ? '#FF6B9D' : '#69F0AE' }}>{formatBRL(spent)}</div>
                       {budget > 0 ? (
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>de {formatBRL(budget)} ({pct.toFixed(0)}%)</div>
                       ) : (
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>sem orçamento definido</div>
                       )}
-                      {over && <div style={{ fontSize: 11, color: '#FF6B9D', marginTop: 6, fontWeight: 600 }}>⚠ Estourou {formatBRL(spent - budget)}</div>}
+                      {over && <div style={{ fontSize: 11, color: '#FF6B9D', marginTop: 6, fontWeight: 600 }}>Estourou {formatBRL(spent - budget)}</div>}
                       {/* Monthly breakdown for annual budget in annual/quarterly view */}
                       {cat.budgetType === 'annual' && viewPeriod !== 'monthly' && periodMonths.length > 1 && budget > 0 && (
                         <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 10 }}>
@@ -1137,7 +1137,7 @@ export default function FinFlowApp() {
                         <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>{renderIcon(cat.icon, 22)}</span>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
-                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Previsão anual' : '🔁 Previsão mensal'}</div>
+                      <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? 'Previsão anual' : 'Previsão mensal'}</div>
                       <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: '#69F0AE' }}>{formatBRL(received)}</div>
                       {budget > 0 ? (
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>de {formatBRL(budget)} ({pct.toFixed(0)}%)</div>
@@ -1173,13 +1173,13 @@ export default function FinFlowApp() {
             </div>
             <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
               {[
-                { l: 'Receita Média', v: formatBRL(fd.avgIncome), c: '#69F0AE', i: '📈' },
-                { l: 'Despesa Média', v: formatBRL(fd.avgExpense), c: '#FF6B9D', i: '📉' },
-                { l: 'Tendência', v: fd.trend > 0 ? '⚠️ Subindo' : '✅ Estável', c: fd.trend > 0 ? '#FFD740' : '#69F0AE', i: '📊' },
-                { l: 'Taxa Economia', v: fd.avgIncome > 0 ? `${((1 - fd.avgExpense / fd.avgIncome) * 100).toFixed(1)}%` : '—', c: '#B24DFF', i: '🎯' },
+                { l: 'Receita Média', v: formatBRL(fd.avgIncome), c: '#69F0AE', i: 'trending' },
+                { l: 'Despesa Média', v: formatBRL(fd.avgExpense), c: '#FF6B9D', i: 'chart_bar' },
+                { l: 'Tendência', v: fd.trend > 0 ? 'Subindo' : 'Estável', c: fd.trend > 0 ? '#FFD740' : '#69F0AE', i: 'chart_up' },
+                { l: 'Taxa Economia', v: fd.avgIncome > 0 ? `${((1 - fd.avgExpense / fd.avgIncome) * 100).toFixed(1)}%` : '—', c: '#B24DFF', i: 'target' },
               ].map((k, i) => (
                 <div key={i} className="glass" style={{ textAlign: 'center', padding: 20 }}>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>{k.i}</div>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>{renderIcon(k.i, 20)}</div>
                   <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{k.l}</div>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: k.c }}>{k.v}</div>
                 </div>
@@ -1252,13 +1252,13 @@ export default function FinFlowApp() {
               <div className="mono" style={{ fontSize: 42, fontWeight: 700, color: '#B24DFF', textShadow: '0 0 40px rgba(178,77,255,0.3)' }}>{formatBRL(totalPatrimonio)}</div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 16 }}>
                 {[
-                  { l: 'Contas', v: bankTotal, c: '#69F0AE', i: '🏦' },
-                  { l: 'Investimentos', v: investTotal, c: '#00E5FF', i: '📈' },
-                  { l: 'Bens', v: assetTotal, c: '#FFD740', i: '🏠' },
-                  { l: 'Cartões', v: -cardDebt, c: '#FF6B9D', i: '💳' },
+                  { l: 'Contas', v: bankTotal, c: '#69F0AE', i: 'bank' },
+                  { l: 'Investimentos', v: investTotal, c: '#00E5FF', i: 'trending' },
+                  { l: 'Bens', v: assetTotal, c: '#FFD740', i: 'house' },
+                  { l: 'Cartões', v: -cardDebt, c: '#FF6B9D', i: 'card' },
                 ].filter(x => x.v !== 0 || x.l === 'Contas').map((s, i) => (
                   <div key={i} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 18, marginBottom: 4 }}>{s.i}</div>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>{renderIcon(s.i, 20)}</div>
                     <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: s.c }}>{formatBRL(s.v)}</div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{s.l}</div>
                   </div>
@@ -1268,7 +1268,7 @@ export default function FinFlowApp() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-              {[{id:'summary',l:'📊 Resumo'},{id:'assets',l:'🏠 Bens'},{id:'investments',l:'📈 Investimentos'}].map(t=>(
+              {[{id:'summary',l:'Resumo'},{id:'assets',l:'Bens'},{id:'investments',l:'Investimentos'}].map(t=>(
                 <button key={t.id} className={`chip ${patrimonioTab===t.id?'active':''}`} onClick={()=>setPatrimonioTab(t.id)}>{t.l}</button>
               ))}
             </div>
@@ -1330,9 +1330,9 @@ export default function FinFlowApp() {
             {patrimonioTab === 'assets' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                  <button className="btn-primary" onClick={() => setEditModal({ type: 'asset', data: { id: '', name: '', icon: '🏠', value: '', category: '', acquiredDate: todayStr, notes: '' } })}>+ Novo Bem</button>
+                  <button className="btn-primary" onClick={() => setEditModal({ type: 'asset', data: { id: '', name: '', icon: 'house', value: '', category: '', acquiredDate: todayStr, notes: '' } })}>+ Novo Bem</button>
                 </div>
-                {assets.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>🏠</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum bem cadastrado</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginTop: 8 }}>Adicione imóveis, veículos e outros bens</p></div>}
+                {assets.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ opacity: 0.3, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>{renderIcon('box', 48, 'rgba(255,255,255,0.3)')}</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum bem cadastrado</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginTop: 8 }}>Adicione imóveis, veículos e outros bens</p></div>}
                 <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16 }}>
                   {assets.map(a => (
                     <div key={a.id} className="glass hoverable" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setEditModal({ type: 'asset', data: a })}>
@@ -1353,9 +1353,9 @@ export default function FinFlowApp() {
             {patrimonioTab === 'investments' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                  <button className="btn-primary" onClick={() => setEditModal({ type: 'investment', data: { id: '', institution: '', icon: '🏦', category: '', history: [] } })}>+ Novo Investimento</button>
+                  <button className="btn-primary" onClick={() => setEditModal({ type: 'investment', data: { id: '', institution: '', icon: 'bank', category: '', history: [] } })}>+ Novo Investimento</button>
                 </div>
-                {investments.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>📈</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum investimento cadastrado</p></div>}
+                {investments.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ opacity: 0.3, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>{renderIcon('box', 48, 'rgba(255,255,255,0.3)')}</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum investimento cadastrado</p></div>}
                 {investments.map(inv => {
                   const currentVal = inv.history?.length ? inv.history[inv.history.length - 1].value : 0;
                   const totalContrib = inv.history?.reduce((s, h) => s + (h.contribution || 0), 0) || 0;
@@ -1408,9 +1408,9 @@ export default function FinFlowApp() {
                         </div>
                       )}
                       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                        <button className="btn-secondary" onClick={() => setEditModal({ type: 'update_position', data: inv })} style={{ fontSize: 12 }}>📊 Atualizar Posição</button>
-                        <button className="btn-secondary" onClick={() => setEditModal({ type: 'investment', data: inv })} style={{ fontSize: 12 }}>✏️ Editar</button>
-                        <button className="btn-danger" onClick={() => { setInvestments(prev => prev.filter(x => x.id !== inv.id)); notify('Investimento removido'); }} style={{ fontSize: 12, marginLeft: 'auto' }}>🗑</button>
+                        <button className="btn-secondary" onClick={() => setEditModal({ type: 'update_position', data: inv })} style={{ fontSize: 12 }}>{renderIcon('chart_up', 12)} Atualizar Posição</button>
+                        <button className="btn-secondary" onClick={() => setEditModal({ type: 'investment', data: inv })} style={{ fontSize: 12 }}>Editar</button>
+                        <button className="btn-danger" onClick={() => { setInvestments(prev => prev.filter(x => x.id !== inv.id)); notify('Investimento removido'); }} style={{ fontSize: 12, marginLeft: 'auto' }}>Remover</button>
                       </div>
                     </div>
                   );
@@ -1428,7 +1428,7 @@ export default function FinFlowApp() {
             </div>
             {/* Settings Tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-              {[{id:'accounts',l:'🏦 Contas'},{id:'cards',l:'💳 Cartões'},{id:'categories',l:'📂 Categorias'},{id:'apikey',l:'🔑 API Key'},{id:'data',l:'💾 Dados'},{id:'reconcile',l:'🔄 Reconciliar'}].map(t=>(
+              {[{id:'accounts',l:'Contas'},{id:'cards',l:'Cartões'},{id:'categories',l:'Categorias'},{id:'apikey',l:'API Key'},{id:'data',l:'Dados'},{id:'reconcile',l:'Reconciliar'}].map(t=>(
                 <button key={t.id} className={`chip ${settingsTab===t.id?'active':''}`} onClick={()=>setSettingsTab(t.id)}>{t.l}</button>
               ))}
             </div>
@@ -1437,8 +1437,8 @@ export default function FinFlowApp() {
             {settingsTab === 'accounts' && (
               <div className="glass">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600 }}>🏦 Contas Bancárias</h3>
-                  <button className="btn-primary" onClick={() => setEditModal({ type: 'bank', data: { id: '', name: '', icon: '🏦', balance: '', initialBalance: '', color: '#69F0AE' } })}>+ Nova Conta</button>
+                  <h3 style={{ fontSize: 16, fontWeight: 600 }}>{renderIcon('bank', 16)} Contas Bancárias</h3>
+                  <button className="btn-primary" onClick={() => setEditModal({ type: 'bank', data: { id: '', name: '', icon: 'bank', balance: '', initialBalance: '', color: '#69F0AE' } })}>+ Nova Conta</button>
                 </div>
                 {bankAccounts.length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20 }}>Nenhuma conta cadastrada</p>}
                 {bankAccounts.map(acc => (
@@ -1455,8 +1455,8 @@ export default function FinFlowApp() {
             {settingsTab === 'cards' && (
               <div className="glass">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600 }}>💳 Cartões de Crédito</h3>
-                  <button className="btn-primary" onClick={() => setEditModal({ type: 'card', data: { id: '', name: '', icon: '💳', limit: '', used: 0, brand: '', color: '#FF6B9D' } })}>+ Novo Cartão</button>
+                  <h3 style={{ fontSize: 16, fontWeight: 600 }}>{renderIcon('card', 16)} Cartões de Crédito</h3>
+                  <button className="btn-primary" onClick={() => setEditModal({ type: 'card', data: { id: '', name: '', icon: 'card', limit: '', used: 0, brand: '', color: '#FF6B9D' } })}>+ Novo Cartão</button>
                 </div>
                 {creditCards.length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20 }}>Nenhum cartão cadastrado</p>}
                 {creditCards.map(card => (
@@ -1481,15 +1481,15 @@ export default function FinFlowApp() {
                 {/* Expense Cats */}
                 <div className="glass" style={{ marginBottom: 20 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600 }}>📉 Categorias de Despesa</h3>
-                    <button className="btn-primary" onClick={() => setEditModal({ type: 'expense_cat', data: { id: '', name: '', icon: '📦', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
+                    <h3 style={{ fontSize: 16, fontWeight: 600 }}>{renderIcon('chart_bar', 16)} Categorias de Despesa</h3>
+                    <button className="btn-primary" onClick={() => setEditModal({ type: 'expense_cat', data: { id: '', name: '', icon: 'box', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
                     {expenseCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'expense_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {renderIcon(cat.icon, 20)}
-                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : `🔁 ${formatBRL(cat.monthlyBudget)}/mês`}</div></div>
+                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? 'Anual variável' : `${formatBRL(cat.monthlyBudget)}/mês`}</div></div>
                         </div>
                       </div>
                     ))}
@@ -1498,15 +1498,15 @@ export default function FinFlowApp() {
                 {/* Income Cats */}
                 <div className="glass">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600 }}>📈 Categorias de Receita</h3>
-                    <button className="btn-primary" onClick={() => setEditModal({ type: 'income_cat', data: { id: '', name: '', icon: '💰', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
+                    <h3 style={{ fontSize: 16, fontWeight: 600 }}>{renderIcon('trending', 16)} Categorias de Receita</h3>
+                    <button className="btn-primary" onClick={() => setEditModal({ type: 'income_cat', data: { id: '', name: '', icon: 'coins', budgetType: 'monthly', monthlyBudget: '', annualBudget: {} } })}>+ Nova</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
                     {incomeCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'income_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {renderIcon(cat.icon, 20)}
-                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : (cat.monthlyBudget ? `🔁 ${formatBRL(cat.monthlyBudget)}/mês` : 'Sem previsão')}</div></div>
+                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? 'Anual variável' : (cat.monthlyBudget ? `${formatBRL(cat.monthlyBudget)}/mês` : 'Sem previsão')}</div></div>
                         </div>
                       </div>
                     ))}
@@ -1519,19 +1519,19 @@ export default function FinFlowApp() {
             {settingsTab === 'apikey' && (
               <div className="glass" style={{ borderColor: apiKey ? 'rgba(105,240,174,0.15)' : 'rgba(255,215,64,0.2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <span style={{ fontSize: 24 }}>🔑</span>
+                  <span style={{ }}>{renderIcon('transfer', 24, 'rgba(178,77,255,0.5)')}</span>
                   <div><h3 style={{ fontSize: 16, fontWeight: 600 }}>API Key — Claude (Anthropic)</h3><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Necessária para o scanner de recibos</p></div>
-                  {apiKey ? <span className="badge badge-approved" style={{ marginLeft: 'auto' }}>✓ OK</span> : <span className="badge badge-pending" style={{ marginLeft: 'auto' }}>⏳</span>}
+                  {apiKey ? <span className="badge badge-approved" style={{ marginLeft: 'auto' }}>OK</span> : <span className="badge badge-pending" style={{ marginLeft: 'auto' }}>...<//span>}
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input className="glass-input" type={showApiKey?'text':'password'} placeholder="sk-ant-api03-..." value={apiKey} onChange={e=>setApiKey(e.target.value)} style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }} />
-                    <button onClick={()=>setShowApiKey(!showApiKey)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', fontSize: 16 }}>{showApiKey ? '🙈' : '👁️'}</button>
+                    <button onClick={()=>setShowApiKey(!showApiKey)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center' }}>{showApiKey ? <GlassIcon icon="shield" size={16} color="rgba(255,255,255,0.35)" /> : <GlassIcon icon="target" size={16} color="rgba(255,255,255,0.35)" />}</button>
                   </div>
                   <button className="btn-primary" onClick={()=>saveApiKeyFn(apiKey)}>Salvar</button>
                 </div>
                 <div style={{ marginTop: 14, padding: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)' }}>
-                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>📌 <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Como obter:</strong> console.anthropic.com → API Keys → Create Key<br />💰 <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Custo:</strong> ~R$ 0,02 por foto escaneada<br />🔒 A chave fica salva apenas no seu navegador</p>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}><strong style={{ color: 'rgba(255,255,255,0.5)' }}>Como obter:</strong> console.anthropic.com → API Keys → Create Key<br /><strong style={{ color: 'rgba(255,255,255,0.5)' }}>Custo:</strong> ~R$ 0,02 por foto escaneada<br />A chave fica salva apenas no seu navegador</p>
                 </div>
               </div>
             )}
@@ -1539,16 +1539,16 @@ export default function FinFlowApp() {
             {/* DATA */}
             {settingsTab === 'data' && (
               <div className="glass">
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>💾 Gerenciar Dados</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>{renderIcon('archive', 16)} Gerenciar Dados</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
                   {[{ l: 'Transações', v: transactions.length, c: '#00E5FF' },{ l: 'Contas', v: bankAccounts.length, c: '#FFD740' },{ l: 'Cartões', v: creditCards.length, c: '#FF6B9D' },{ l: 'Bens', v: assets.length, c: '#69F0AE' }].map((s,i)=>(
                     <div key={i} style={{ textAlign: 'center', padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.04)' }}><div className="mono" style={{ fontSize: 24, fontWeight: 700, color: s.c }}>{s.v}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>{s.l}</div></div>
                   ))}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <button className="btn-secondary" onClick={exportBackup} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}><span style={{ fontSize: 18 }}>📤</span><div style={{ textAlign: 'left' }}><div style={{ fontWeight: 600, fontSize: 13 }}>Exportar Backup</div><div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Arquivo .json</div></div></button>
-                  <button className="btn-secondary" onClick={()=>backupRef.current?.click()} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}><span style={{ fontSize: 18 }}>📥</span><div style={{ textAlign: 'left' }}><div style={{ fontWeight: 600, fontSize: 13 }}>Restaurar Backup</div><div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Carregar .json</div></div></button>
-                  <button onClick={clearAllData} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', gridColumn: 'span 2', background: 'rgba(255,107,157,0.08)', border: '1px solid rgba(255,107,157,0.2)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: '#FF6B9D' }}><span style={{ fontSize: 18 }}>🗑</span><div style={{ fontWeight: 600, fontSize: 13 }}>Limpar Todos os Dados</div></button>
+                  <button className="btn-secondary" onClick={exportBackup} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}><span style={{ }}>{renderIcon('nav_down', 18, 'rgba(255,255,255,0.5)')}</span><div style={{ textAlign: 'left' }}><div style={{ fontWeight: 600, fontSize: 13 }}>Exportar Backup</div><div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Arquivo .json</div></div></button>
+                  <button className="btn-secondary" onClick={()=>backupRef.current?.click()} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}><span>{renderIcon('archive', 18, 'rgba(255,255,255,0.5)')}</span><div style={{ textAlign: 'left' }}><div style={{ fontWeight: 600, fontSize: 13 }}>Restaurar Backup</div><div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>Carregar .json</div></div></button>
+                  <button onClick={clearAllData} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', gridColumn: 'span 2', background: 'rgba(255,107,157,0.08)', border: '1px solid rgba(255,107,157,0.2)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: '#FF6B9D' }}><span style={{ }}>{renderIcon('archive', 18, '#FF6B9D')}</span><div style={{ fontWeight: 600, fontSize: 13 }}>Limpar Todos os Dados</div></button>
                 </div>
               </div>
             )}
@@ -1557,11 +1557,11 @@ export default function FinFlowApp() {
             {settingsTab === 'reconcile' && (
               <div className="glass">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <span style={{ fontSize: 24 }}>🔄</span>
+                  <span style={{ }}>{renderIcon('transfer', 24, 'rgba(178,77,255,0.5)')}</span>
                   <div><h3 style={{ fontSize: 16, fontWeight: 600 }}>Reconciliar Saldos</h3><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Ficou tempo sem contabilizar? Atualize os saldos reais aqui.</p></div>
                 </div>
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 20, lineHeight: 1.7 }}>Edite os saldos atuais das suas contas e o valor usado dos cartões. Isso ajusta tudo de uma vez sem precisar lançar transações retroativas.</p>
-                {bankAccounts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>🏦 Contas Bancárias</div>}
+                {bankAccounts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>{renderIcon('bank', 14)} Contas Bancárias</div>}
                 {bankAccounts.map(acc => (
                   <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     {renderIcon(acc.icon, 20)}
@@ -1570,7 +1570,7 @@ export default function FinFlowApp() {
                     <input className="glass-input" type="number" placeholder="Novo saldo" style={{ width: 160 }} onBlur={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) { setBankAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, balance: v } : a)); notify(`${acc.name} atualizado!`); } }} />
                   </div>
                 ))}
-                {creditCards.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, marginTop: 20 }}>💳 Cartões de Crédito</div>}
+                {creditCards.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, marginTop: 20 }}>{renderIcon('card', 14)} Cartões de Crédito</div>}
                 {creditCards.map(card => (
                   <div key={card.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     {renderIcon(card.icon, 20)}
@@ -1608,8 +1608,8 @@ export default function FinFlowApp() {
                 <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Saldo Atual</label><input className="glass-input" type="number" placeholder="0.00" value={d.balance} onChange={e => setD(p => ({ ...p, balance: e.target.value }))} /></div>
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
-                {!isNew && <button className="btn-danger" onClick={remove}>🗑 Remover</button>}
+                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>Salvar</button>
+                {!isNew && <button className="btn-danger" onClick={remove}>Remover</button>}
               </div>
             </EditModal>
           );
@@ -1638,8 +1638,8 @@ export default function FinFlowApp() {
               </div>
               <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Fatura Atual (valor usado)</label><input className="glass-input" type="number" placeholder="0" value={d.used || ''} onChange={e => setD(p => ({ ...p, used: e.target.value }))} /></div>
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
-                {!isNew && <button className="btn-danger" onClick={remove}>🗑 Remover</button>}
+                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>Salvar</button>
+                {!isNew && <button className="btn-danger" onClick={remove}>Remover</button>}
               </div>
             </EditModal>
           );
@@ -1668,11 +1668,11 @@ export default function FinFlowApp() {
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Tipo de Orçamento</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <button onClick={() => setD(p => ({ ...p, budgetType: 'monthly' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'monthly' ? '1px solid #B24DFF' : '1px solid rgba(255,255,255,0.08)', background: bType === 'monthly' ? 'rgba(178,77,255,0.12)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>🔁 Mensal Fixo</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{renderIcon('clock', 14)} Mensal Fixo</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Mesmo valor todo mês</div>
                   </button>
                   <button onClick={() => setD(p => ({ ...p, budgetType: 'annual' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'annual' ? '1px solid #FFD740' : '1px solid rgba(255,255,255,0.08)', background: bType === 'annual' ? 'rgba(255,215,64,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>📅 Anual Variável</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{renderIcon('flag', 14)} Anual Variável</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personalizar por mês</div>
                   </button>
                 </div>
@@ -1698,8 +1698,8 @@ export default function FinFlowApp() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
-                {!isNew && <button className="btn-danger" onClick={remove}>🗑</button>}
+                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>Salvar</button>
+                {!isNew && <button className="btn-danger" onClick={remove}>Remover</button>}
               </div>
             </EditModal>
           );
@@ -1728,11 +1728,11 @@ export default function FinFlowApp() {
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 8 }}>Tipo de Previsão</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <button onClick={() => setD(p => ({ ...p, budgetType: 'monthly' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'monthly' ? '1px solid #69F0AE' : '1px solid rgba(255,255,255,0.08)', background: bType === 'monthly' ? 'rgba(105,240,174,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>🔁 Mensal Fixo</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{renderIcon('clock', 14)} Mensal Fixo</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Mesmo valor todo mês</div>
                   </button>
                   <button onClick={() => setD(p => ({ ...p, budgetType: 'annual' }))} style={{ padding: '12px 14px', borderRadius: 12, border: bType === 'annual' ? '1px solid #FFD740' : '1px solid rgba(255,255,255,0.08)', background: bType === 'annual' ? 'rgba(255,215,64,0.08)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>📅 Anual Variável</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{renderIcon('flag', 14)} Anual Variável</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personalizar por mês</div>
                   </button>
                 </div>
@@ -1758,8 +1758,8 @@ export default function FinFlowApp() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
-                {!isNew && <button className="btn-danger" onClick={remove}>🗑</button>}
+                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>Salvar</button>
+                {!isNew && <button className="btn-danger" onClick={remove}>Remover</button>}
               </div>
             </EditModal>
           );
@@ -1791,8 +1791,8 @@ export default function FinFlowApp() {
                 <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Observações</label><input className="glass-input" placeholder="Notas..." value={d.notes || ''} onChange={e => setD(p => ({ ...p, notes: e.target.value }))} /></div>
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>✓ Salvar</button>
-                {!isNew && <button className="btn-danger" onClick={remove}>🗑 Remover</button>}
+                <button className="btn-primary" onClick={save} style={{ flex: 1 }}>Salvar</button>
+                {!isNew && <button className="btn-danger" onClick={remove}>Remover</button>}
               </div>
             </EditModal>
           );
@@ -1815,7 +1815,7 @@ export default function FinFlowApp() {
                 <input className="glass-input" placeholder="Instituição (ex: XP, BTG, Rico)" value={d.institution || ''} onChange={e => setD(p => ({ ...p, institution: e.target.value }))} style={{ flex: 1 }} />
               </div>
               <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Categoria (ex: Renda Fixa, Ações, FII)</label><input className="glass-input" placeholder="Você define..." value={d.category || ''} onChange={e => setD(p => ({ ...p, category: e.target.value }))} /></div>
-              <button className="btn-primary" onClick={save} style={{ width: '100%' }}>✓ Salvar</button>
+              <button className="btn-primary" onClick={save} style={{ width: '100%' }}>Salvar</button>
             </EditModal>
           );
         })()}
@@ -1839,8 +1839,8 @@ export default function FinFlowApp() {
                 <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Posição Consolidada (R$)</label><input className="glass-input" type="number" placeholder="Valor total atual" value={value} onChange={e => setValue(e.target.value)} /></div>
                 <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Aporte do Mês (R$)</label><input className="glass-input" type="number" placeholder="Quanto aportou (0 se nada)" value={contribution} onChange={e => setContribution(e.target.value)} /></div>
               </div>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 16, lineHeight: 1.6 }}>💡 A rentabilidade é calculada automaticamente: Posição atual - Posição anterior - Aporte = Rendimento</p>
-              <button className="btn-primary" onClick={save} style={{ width: '100%' }}>✓ Registrar Posição</button>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 16, lineHeight: 1.6 }}>A rentabilidade é calculada automaticamente: Posição atual - Posição anterior - Aporte = Rendimento</p>
+              <button className="btn-primary" onClick={save} style={{ width: '100%' }}>Registrar Posição</button>
             </EditModal>
           );
         })()}

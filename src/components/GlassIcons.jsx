@@ -162,18 +162,6 @@ export const GLASS_ICON_GROUPS = [
   { label: 'Geral', keys: ['star','gift','tag','clock','box','bell','bookmark','globe','sun','sparkle','target','flag','archive','recycle','leaf','zap','heart2','diamond','hex','circle','check','plus'] },
 ];
 
-// Emoji fallback groups
-export const EMOJI_GROUPS = [
-  { label: 'Finanças', icons: ['💰','💳','💵','💎','🏦','📊','📈','💹','🪙','🧾','💸','📉'] },
-  { label: 'Casa', icons: ['🏠','🏡','🏢','🔑','💡','🔌','🧹','🛁','🪣'] },
-  { label: 'Transporte', icons: ['🚗','🏍️','🚌','✈️','🚲','⛽','🛵','🚂'] },
-  { label: 'Alimentação', icons: ['🍽️','🛒','☕','🍕','🍔','🥩','🍺','🍷'] },
-  { label: 'Saúde', icons: ['💊','🏥','🩺','❤️','🏃','💪','🧘'] },
-  { label: 'Educação', icons: ['📚','🎓','📝','🖥️','🔬','🏫'] },
-  { label: 'Lazer', icons: ['🎮','🎬','🎵','⚽','🎨','📷','🎧','⛺','🏔️'] },
-  { label: 'Outros', icons: ['📦','🎁','🐾','👶','✨','🔔','🏷️','⭐','🌍','♻️','🍃','⚡','👑','👟'] },
-];
-
 // ── SVG Renderer with Liquid Glass style ──
 export function GlassIcon({ icon, size = 20, color = 'rgba(255,255,255,0.7)', glow, style }) {
   const def = GLASS_ICONS[icon];
