@@ -1,20 +1,20 @@
 export const DEFAULT_EXPENSE_CATS = [
-  { id: 'alimentacao', name: 'Alimentação', icon: '🍽️', budgetType: 'monthly', monthlyBudget: 1500, annualBudget: {} },
-  { id: 'transporte', name: 'Transporte', icon: '🚗', budgetType: 'monthly', monthlyBudget: 800, annualBudget: {} },
-  { id: 'moradia', name: 'Moradia', icon: '🏠', budgetType: 'monthly', monthlyBudget: 3000, annualBudget: {} },
-  { id: 'saude', name: 'Saúde', icon: '💊', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
-  { id: 'educacao', name: 'Educação', icon: '📚', budgetType: 'monthly', monthlyBudget: 400, annualBudget: {} },
-  { id: 'lazer', name: 'Lazer', icon: '🎮', budgetType: 'monthly', monthlyBudget: 600, annualBudget: {} },
-  { id: 'vestuario', name: 'Vestuário', icon: '👔', budgetType: 'annual', monthlyBudget: 400, annualBudget: { 1: 200, 2: 0, 3: 300, 4: 0, 5: 0, 6: 500, 7: 0, 8: 0, 9: 200, 10: 0, 11: 0, 12: 600 } },
-  { id: 'servicos', name: 'Serviços', icon: '⚡', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
-  { id: 'outros', name: 'Outros', icon: '📦', budgetType: 'monthly', monthlyBudget: 300, annualBudget: {} },
+  { id: 'alimentacao', name: 'Alimentação', icon: 'utensils', budgetType: 'monthly', monthlyBudget: 1500, annualBudget: {} },
+  { id: 'transporte', name: 'Transporte', icon: 'car', budgetType: 'monthly', monthlyBudget: 800, annualBudget: {} },
+  { id: 'moradia', name: 'Moradia', icon: 'house', budgetType: 'monthly', monthlyBudget: 3000, annualBudget: {} },
+  { id: 'saude', name: 'Saúde', icon: 'pill', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
+  { id: 'educacao', name: 'Educação', icon: 'book', budgetType: 'monthly', monthlyBudget: 400, annualBudget: {} },
+  { id: 'lazer', name: 'Lazer', icon: 'gamepad', budgetType: 'monthly', monthlyBudget: 600, annualBudget: {} },
+  { id: 'vestuario', name: 'Vestuário', icon: 'shirt', budgetType: 'annual', monthlyBudget: 400, annualBudget: { 1: 200, 2: 0, 3: 300, 4: 0, 5: 0, 6: 500, 7: 0, 8: 0, 9: 200, 10: 0, 11: 0, 12: 600 } },
+  { id: 'servicos', name: 'Serviços', icon: 'bolt', budgetType: 'monthly', monthlyBudget: 500, annualBudget: {} },
+  { id: 'outros', name: 'Outros', icon: 'box', budgetType: 'monthly', monthlyBudget: 300, annualBudget: {} },
 ];
 
 export const DEFAULT_INCOME_CATS = [
-  { id: 'salario', name: 'Salário', icon: '💰', budgetType: 'monthly', monthlyBudget: 12000, annualBudget: {} },
-  { id: 'freelance', name: 'Freelance', icon: '💻', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
-  { id: 'rendimentos', name: 'Rendimentos', icon: '📈', budgetType: 'monthly', monthlyBudget: 0, annualBudget: {} },
-  { id: 'outros_renda', name: 'Outros', icon: '💵', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
+  { id: 'salario', name: 'Salário', icon: 'money', budgetType: 'monthly', monthlyBudget: 12000, annualBudget: {} },
+  { id: 'freelance', name: 'Freelance', icon: 'laptop', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
+  { id: 'rendimentos', name: 'Rendimentos', icon: 'chart_up', budgetType: 'monthly', monthlyBudget: 0, annualBudget: {} },
+  { id: 'outros_renda', name: 'Outros', icon: 'coins', budgetType: 'annual', monthlyBudget: 0, annualBudget: {} },
 ];
 
 export const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];

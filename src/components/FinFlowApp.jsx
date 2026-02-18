@@ -6,9 +6,14 @@ import { computeForecast } from '@/lib/forecast';
 import { generatePredictions, getMonthlyBudgetTarget } from '@/lib/predictions';
 import { parseImportFile, detectDuplicates } from '@/lib/importParser';
 import IconPicker from './IconPicker';
+import { renderIcon, GlassIcon, NAV_ICON_MAP, GLASS_ICONS } from './GlassIcons';
+// Helper: icon text for <option> tags where SVG cant render
+const iconText = (icon) => { if (!icon) return ''; if (typeof icon === 'string' && icon.length > 2) return GLASS_ICONS[icon]?.l ? `◆` : '◆'; return icon; };
 
 const today = new Date();
 const cm = today.getMonth(), cy = today.getFullYear();
+const getLocalDateStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const todayStr = getLocalDateStr();
 
 function generateSampleData() {
   const tx = [];
@@ -118,7 +123,7 @@ export default function FinFlowApp() {
   const [editModal, setEditModal] = useState(null);
   const [patrimonioTab, setPatrimonioTab] = useState('summary');
   const [settingsTab, setSettingsTab] = useState('accounts');
-  const [newTx, setNewTx] = useState({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
+  const [newTx, setNewTx] = useState({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: todayStr, accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
 
   const fileRef = useRef(null);
   const galleryRef = useRef(null);
@@ -231,7 +236,7 @@ export default function FinFlowApp() {
   const catIncomes = {};
   periodTx.filter(t => t.type === 'income').forEach(t => { if (!catIncomes[t.category]) catIncomes[t.category] = 0; catIncomes[t.category] += t.amount; });
 
-  const getCat = (id) => expenseCats.find(c => c.id === id) || incomeCats.find(c => c.id === id) || { name: id, icon: '📦', color: '#B388FF' };
+  const getCat = (id) => expenseCats.find(c => c.id === id) || incomeCats.find(c => c.id === id) || { name: id, icon: 'box', color: '#B388FF' };
 
   // ─── TRANSACTION ACTIONS ───
   const addTransaction = useCallback((tx) => {
@@ -299,7 +304,7 @@ export default function FinFlowApp() {
       addTransaction({ ...newTx, amount: parsed });
     }
     notify('"' + newTx.description + '" lançado!');
-    setNewTx({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
+    setNewTx({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: getLocalDateStr(), accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
     setShowAddTx(false);
   };
 
@@ -322,7 +327,7 @@ export default function FinFlowApp() {
     reader.readAsDataURL(file);
   };
 
-  const confirmScan = () => { if (scanResult) { const extra = {}; if (scanResult.cardId) extra.cardId = scanResult.cardId; else if (scanResult.accountId) extra.accountId = scanResult.accountId; addTransaction({ description: scanResult.description, amount: scanResult.amount, category: scanResult.category, type: scanResult.type || 'expense', date: scanResult.date || today.toISOString().split('T')[0], ...extra }); setScanResult(null); notify('Lançado!'); } };
+  const confirmScan = () => { if (scanResult) { const extra = {}; if (scanResult.cardId) extra.cardId = scanResult.cardId; else if (scanResult.accountId) extra.accountId = scanResult.accountId; addTransaction({ description: scanResult.description, amount: scanResult.amount, category: scanResult.category, type: scanResult.type || 'expense', date: scanResult.date || todayStr, ...extra }); setScanResult(null); notify('Lançado!'); } };
 
   // ─── IMPORT ───
   const handleImportFile = async (file) => { if (!file) return; setImporting(true); try { const parsed = await parseImportFile(file); const checked = detectDuplicates(parsed, transactions); const dupeCount = checked.filter(t => t.isDuplicate).length; setImportStaging(prev => [...prev, ...checked]); notify(`${parsed.length} transações importadas!${dupeCount > 0 ? ` ⚠️ ${dupeCount} possíveis duplicatas.` : ''}`); } catch (err) { notify(err.message, 'error'); } setImporting(false); };
@@ -350,7 +355,7 @@ export default function FinFlowApp() {
   // ─── SETTINGS ACTIONS ───
   const saveApiKeyFn = (k) => { setApiKey(k); try { localStorage.setItem('finflow-api-key', k); } catch {} notify('API Key salva!'); };
   const clearAllData = () => { setTransactions([]); setImportHistory([]); setImportStaging([]); setBankAccounts([]); setCreditCards([]); setAssets([]); setInvestments([]); setExpenseCats(DEFAULT_EXPENSE_CATS); setIncomeCats(DEFAULT_INCOME_CATS); setHasSampleData(false); notify('Dados limpos!'); };
-  const exportBackup = () => { const d = { transactions, bankAccounts, creditCards, expenseCats, incomeCats, assets, investments, importHistory }; const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `finflow-backup-${today.toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); notify('Backup exportado!'); };
+  const exportBackup = () => { const d = { transactions, bankAccounts, creditCards, expenseCats, incomeCats, assets, investments, importHistory }; const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `finflow-backup-${todayStr}.json`; a.click(); URL.revokeObjectURL(url); notify('Backup exportado!'); };
   const importBackupFn = (file) => { const reader = new FileReader(); reader.onload = (e) => { try { const d = JSON.parse(e.target.result); if (d.transactions) { setTransactions(d.transactions); if (d.bankAccounts) setBankAccounts(d.bankAccounts); if (d.creditCards) setCreditCards(d.creditCards); if (d.expenseCats) setExpenseCats(d.expenseCats); if (d.incomeCats) setIncomeCats(d.incomeCats); if (d.assets) setAssets(d.assets); if (d.investments) setInvestments(d.investments); setHasSampleData(false); notify('Backup restaurado!'); } } catch { notify('Arquivo inválido.', 'error'); } }; reader.readAsText(file); };
 
   const pendingCount = importStaging.filter(t => t.importStatus === 'pending').length;
@@ -359,14 +364,14 @@ export default function FinFlowApp() {
   if (loading) return (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' }}><BgMesh /><div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}><div className="loader" /><p style={{ color: 'rgba(255,255,255,0.5)', marginTop: 20 }}>Carregando FinFlow...</p></div></div>);
 
   const navItems = [
-    { id: 'dashboard', icon: '⬡', label: 'Dashboard' },
-    { id: 'transactions', icon: '⇄', label: 'Lançamentos' },
-    { id: 'scan', icon: '◎', label: 'Escanear' },
-    { id: 'import', icon: '⤓', label: 'Importar' },
-    { id: 'budget', icon: '◉', label: 'Orçamento' },
-    { id: 'patrimonio', icon: '◆', label: 'Patrimônio' },
-    { id: 'forecast', icon: '◐', label: 'Forecast' },
-    { id: 'settings', icon: '⚙', label: 'Config.' },
+    { id: 'dashboard', icon: 'nav_grid', label: 'Dashboard' },
+    { id: 'transactions', icon: 'nav_list', label: 'Lançamentos' },
+    { id: 'scan', icon: 'nav_scan', label: 'Escanear' },
+    { id: 'import', icon: 'nav_down', label: 'Importar' },
+    { id: 'budget', icon: 'nav_pie', label: 'Orçamento' },
+    { id: 'patrimonio', icon: 'nav_diamond', label: 'Patrimônio' },
+    { id: 'forecast', icon: 'nav_trend', label: 'Forecast' },
+    { id: 'settings', icon: 'nav_gear', label: 'Config.' },
   ];
 
   return (
@@ -384,7 +389,7 @@ export default function FinFlowApp() {
         <div className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 12px', flex: 1 }}>
           {navItems.map(n => (
             <button key={n.id} className={`nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
-              <span style={{ fontSize: 17, width: 26, textAlign: 'center', opacity: page === n.id ? 1 : 0.6 }}>{n.icon}</span>
+              <span style={{ width: 26, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GlassIcon icon={n.icon} size={18} color={page === n.id ? '#B24DFF' : 'rgba(255,255,255,0.5)'} glow={page === n.id ? 'rgba(178,77,255,0.5)' : undefined} /></span>
               <span>{n.label}</span>
               {n.id === 'import' && importStaging.length > 0 && <span style={{ marginLeft: 'auto', background: 'rgba(255,215,64,0.2)', color: '#FFD740', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>{importStaging.length}</span>}
             </button>
@@ -449,13 +454,13 @@ export default function FinFlowApp() {
               <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
                 {bankAccounts.map(a => (
                   <div key={a.id} className="glass" style={{ minWidth: 150, padding: '12px 16px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ fontSize: 16 }}>{a.icon}</span><span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{a.name}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>{renderIcon(a.icon, 16)}<span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{a.name}</span></div>
                     <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: a.balance >= 0 ? '#69F0AE' : '#FF6B9D' }}>{formatBRL(a.balance)}</div>
                   </div>
                 ))}
                 {creditCards.map(c => (
                   <div key={c.id} className="glass" style={{ minWidth: 150, padding: '12px 16px', flex: '0 0 auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><span style={{ fontSize: 16 }}>{c.icon}</span><span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{c.name}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>{renderIcon(c.icon, 16)}<span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{c.name}</span></div>
                     <div className="mono" style={{ fontSize: 12, color: '#FF6B9D' }}>Fatura: {formatBRL(c.used || 0)}</div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>Limite: {formatBRL(c.limit)}</div>
                   </div>
@@ -605,7 +610,7 @@ export default function FinFlowApp() {
                   const catTxs = isOpen ? periodTx.filter(t => t.category === cat.id && t.type === 'expense') : [];
                   return (<div key={cat.id} style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center', cursor: 'pointer' }} onClick={() => setCategoryDetail(isOpen ? null : { catId: cat.id, type: 'expense' })}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{renderIcon(cat.icon, 16)} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
                       <div style={{ textAlign: 'right' }}>
                         <span className="mono" style={{ fontSize: 12 }}><span style={{ color: over ? '#FF6B9D' : 'rgba(255,255,255,0.6)' }}>{formatBRL(spent)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                       </div>
@@ -658,7 +663,7 @@ export default function FinFlowApp() {
                   const catTxs = isOpen ? periodTx.filter(t => t.category === cat.id && t.type === 'income') : [];
                   return (<div key={cat.id} style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, cursor: 'pointer' }} onClick={() => setCategoryDetail(isOpen ? null : { catId: cat.id, type: 'income' })}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{cat.icon} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{renderIcon(cat.icon, 16)} {cat.name} <span style={{ fontSize: 10, opacity: 0.4 }}>{isOpen ? '▾' : '▸'}</span></span>
                       <span className="mono" style={{ fontSize: 12 }}><span style={{ color: '#69F0AE' }}>{formatBRL(received)}</span>{budget > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}> / {formatBRL(budget)}</span>}</span>
                     </div>
                     <div style={{ position: 'relative', height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 6, overflow: 'visible' }}>
@@ -697,7 +702,7 @@ export default function FinFlowApp() {
               </div>
               {periodTx.slice(0, 7).map(tx => { const cat = getCat(tx.category); return (
                 <div key={tx.id} className="tx-row">
-                  <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx.type === 'income' ? renderIcon('money', 18, '#69F0AE') : tx.type === 'transfer' ? renderIcon('transfer', 18, '#B24DFF') : renderIcon(cat?.icon || 'box', 18)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}</div>
@@ -736,30 +741,30 @@ export default function FinFlowApp() {
                     <>
                       <select className="glass-input" value={newTx.fromAccountId} onChange={e => setNewTx({...newTx, fromAccountId: e.target.value})}>
                         <option value="">📤 Conta de origem...</option>
-                        {bankAccounts.map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name} ({formatBRL(a.balance)})</option>))}
+                        {bankAccounts.map(a => (<option key={a.id} value={a.id}>{iconText(a.icon)} {a.name} ({formatBRL(a.balance)})</option>))}
                       </select>
                       <select className="glass-input" value={newTx.toAccountId} onChange={e => setNewTx({...newTx, toAccountId: e.target.value})}>
                         <option value="">📥 Conta de destino...</option>
-                        {bankAccounts.filter(a => a.id !== newTx.fromAccountId).map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name} ({formatBRL(a.balance)})</option>))}
+                        {bankAccounts.filter(a => a.id !== newTx.fromAccountId).map(a => (<option key={a.id} value={a.id}>{iconText(a.icon)} {a.name} ({formatBRL(a.balance)})</option>))}
                       </select>
                     </>
                   ) : (
                     <>
                       {newTx.type !== 'card_payment' && (
                         <select className="glass-input" value={newTx.category} onChange={e => setNewTx({...newTx, category: e.target.value})}>
-                          {newTx.type === 'income' ? incomeCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>)) : expenseCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
+                          {newTx.type === 'income' ? incomeCats.map(c => (<option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)) : expenseCats.map(c => (<option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>))}
                         </select>
                       )}
                       {(newTx.type === 'income' || newTx.type === 'card_payment' || (newTx.type === 'expense' && !newTx.cardId)) && (
                         <select className="glass-input" value={newTx.accountId} onChange={e => setNewTx({...newTx, accountId: e.target.value})}>
                           <option value="">Conta bancária...</option>
-                          {bankAccounts.map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name}</option>))}
+                          {bankAccounts.map(a => (<option key={a.id} value={a.id}>{iconText(a.icon)} {a.name}</option>))}
                         </select>
                       )}
                       {(newTx.type === 'expense' || newTx.type === 'card_payment') && creditCards.length > 0 && (
                         <select className="glass-input" value={newTx.cardId} onChange={e => setNewTx({...newTx, cardId: e.target.value, accountId: newTx.type === 'expense' ? '' : newTx.accountId})}>
                           <option value="">{newTx.type === 'card_payment' ? 'Qual cartão?' : 'No cartão? (opcional)'}</option>
-                          {creditCards.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name} (fatura: {formatBRL(c.used||0)})</option>))}
+                          {creditCards.map(c => (<option key={c.id} value={c.id}>{iconText(c.icon)} {c.name} (fatura: {formatBRL(c.used||0)})</option>))}
                         </select>
                       )}
                     </>
@@ -771,7 +776,7 @@ export default function FinFlowApp() {
             {transactions.map(tx => { const cat = getCat(tx.category); const isEditing = editingTxId === tx.id; const isQuickCat = quickCatTxId === tx.id; const sameCats = tx.type === 'income' ? incomeCats : expenseCats; return (
               <div key={tx.id} style={{ position: 'relative' }}>
                 <div className="tx-row" style={{ cursor: 'pointer' }} onClick={() => { setQuickCatTxId(null); setEditingTxId(isEditing ? null : tx.id); }}>
-                  <div onClick={e => { e.stopPropagation(); setEditingTxId(null); setQuickCatTxId(isQuickCat ? null : tx.id); }} style={{ width: 40, height: 40, borderRadius: 14, background: isQuickCat ? 'rgba(178,77,255,0.25)' : isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(178,77,255,0.08)', border: `1px solid ${isQuickCat ? 'rgba(178,77,255,0.6)' : isEditing ? 'rgba(178,77,255,0.4)' : 'rgba(178,77,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, transition: 'all 0.2s', cursor: 'pointer' }} title="Alterar categoria">{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
+                  <div onClick={e => { e.stopPropagation(); setEditingTxId(null); setQuickCatTxId(isQuickCat ? null : tx.id); }} style={{ width: 40, height: 40, borderRadius: 14, background: isQuickCat ? 'rgba(178,77,255,0.25)' : isEditing ? 'rgba(178,77,255,0.15)' : 'rgba(178,77,255,0.08)', border: `1px solid ${isQuickCat ? 'rgba(178,77,255,0.6)' : isEditing ? 'rgba(178,77,255,0.4)' : 'rgba(178,77,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s', cursor: 'pointer' }} title="Alterar categoria">{tx.type === 'income' ? renderIcon('money', 18, '#69F0AE') : tx.type === 'card_payment' ? renderIcon('card', 18, '#64B5F6') : tx.type === 'transfer' ? renderIcon('transfer', 18, '#B24DFF') : renderIcon(cat?.icon || 'box', 18)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
@@ -784,7 +789,7 @@ export default function FinFlowApp() {
                   <div style={{ position: 'absolute', left: 0, top: 50, zIndex: 20, background: 'rgba(15,17,23,0.97)', border: '1px solid rgba(178,77,255,0.3)', borderRadius: 14, padding: 8, display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', animation: 'fadeIn 0.15s ease' }}>
                     {sameCats.map(c => (
                       <button key={c.id} onClick={() => { updateTransaction(tx.id, { category: c.id }); setQuickCatTxId(null); notify(`Categoria: ${c.name}`); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 10, border: tx.category === c.id ? '1px solid rgba(178,77,255,0.5)' : '1px solid rgba(255,255,255,0.06)', background: tx.category === c.id ? 'rgba(178,77,255,0.15)' : 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 12 }}>
-                        <span>{c.icon}</span><span>{c.name}</span>
+                        {renderIcon(c.icon, 16)} <span>{c.name}</span>
                       </button>
                     ))}
                   </div>
@@ -815,8 +820,8 @@ export default function FinFlowApp() {
                       <div>
                         <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', display: 'block', marginBottom: 3 }}>Categoria</label>
                         <select className="glass-input" value={tx.category} onChange={e => updateTransaction(tx.id, { category: e.target.value })} style={{ fontSize: 12 }}>
-                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
-                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
+                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
                         </select>
                       </div>
                       <div>
@@ -827,8 +832,8 @@ export default function FinFlowApp() {
                           updateTransaction(tx.id, isCard ? { cardId: val, accountId: '' } : { accountId: val, cardId: '' });
                         }} style={{ fontSize: 12 }}>
                           <option value="">Nenhum</option>
-                          {bankAccounts.length > 0 && <optgroup label="Contas">{bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}</optgroup>}
-                          {creditCards.length > 0 && <optgroup label="Cartões">{creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>}
+                          {bankAccounts.length > 0 && <optgroup label="Contas">{bankAccounts.map(a => <option key={a.id} value={a.id}>{iconText(a.icon)} {a.name}</option>)}</optgroup>}
+                          {creditCards.length > 0 && <optgroup label="Cartões">{creditCards.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>}
                         </select>
                       </div>
                     </div>
@@ -862,7 +867,7 @@ export default function FinFlowApp() {
                       <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Cartão de Crédito</label>
                       <select className="glass-input" value={importCardId} onChange={e => { setImportCardId(e.target.value); if (e.target.value) setImportAccountId(''); }}>
                         <option value="">Nenhum (não é fatura)</option>
-                        {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                        {creditCards.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}
                       </select>
                     </div>
                   )}
@@ -871,7 +876,7 @@ export default function FinFlowApp() {
                       <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Conta Bancária</label>
                       <select className="glass-input" value={importAccountId} onChange={e => { setImportAccountId(e.target.value); if (e.target.value) setImportCardId(''); }}>
                         <option value="">Nenhuma</option>
-                        {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                        {bankAccounts.map(a => <option key={a.id} value={a.id}>{iconText(a.icon)} {a.name}</option>)}
                       </select>
                     </div>
                   )}
@@ -918,8 +923,8 @@ export default function FinFlowApp() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <select className="glass-input" style={{ padding: '5px 6px', fontSize: 11, flex: 1 }} value={tx.category} onChange={e => updateStagingItem(tx.id, { category: e.target.value })}>
                             <option value="" disabled>Categoria...</option>
-                            <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
-                            <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                            <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
+                            <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
                           </select>
                         </div>
                         <div style={{ display: 'flex', gap: 3 }}>
@@ -997,8 +1002,8 @@ export default function FinFlowApp() {
                       <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Tipo</label><select className="glass-input" value={scanResult.type || 'expense'} onChange={e => setScanResult(p => ({ ...p, type: e.target.value }))}><option value="expense">Despesa</option><option value="income">Receita</option></select></div>
                       <div><label style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'block', marginBottom: 4 }}>Categoria</label>
                         <select className="glass-input" value={scanResult.category} onChange={e => setScanResult(p => ({ ...p, category: e.target.value }))}>
-                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
-                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</optgroup>
+                          <optgroup label="Despesas">{expenseCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
+                          <optgroup label="Receitas">{incomeCats.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}</optgroup>
                         </select>
                       </div>
                     </div>
@@ -1006,11 +1011,11 @@ export default function FinFlowApp() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         <select className="glass-input" value={scanResult.cardId || ''} onChange={e => setScanResult(p => ({ ...p, cardId: e.target.value, accountId: e.target.value ? '' : p.accountId }))}>
                           <option value="">Cartão: nenhum</option>
-                          {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                          {creditCards.map(c => <option key={c.id} value={c.id}>{iconText(c.icon)} {c.name}</option>)}
                         </select>
                         <select className="glass-input" value={scanResult.accountId || ''} onChange={e => setScanResult(p => ({ ...p, accountId: e.target.value, cardId: e.target.value ? '' : p.cardId }))}>
                           <option value="">Conta: nenhuma</option>
-                          {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                          {bankAccounts.map(a => <option key={a.id} value={a.id}>{iconText(a.icon)} {a.name}</option>)}
                         </select>
                       </div>
                     </div>
@@ -1090,7 +1095,7 @@ export default function FinFlowApp() {
                     <div key={cat.id} className="glass hoverable" style={{ textAlign: 'center', padding: 24, borderColor: over ? 'rgba(255,107,157,0.25)' : undefined, background: over ? 'rgba(255,107,157,0.03)' : undefined }}>
                       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative' }}>
                         <GlassRing value={spent} max={budget || spent || 1} size={80} color={over ? '#FF6B9D' : '#B24DFF'} />
-                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 22 }}>{cat.icon}</span>
+                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>{renderIcon(cat.icon, 22)}</span>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
                       <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Orçamento anual' : '🔁 Orçamento mensal'}</div>
@@ -1129,7 +1134,7 @@ export default function FinFlowApp() {
                     <div key={cat.id} className="glass hoverable" style={{ textAlign: 'center', padding: 24 }}>
                       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative' }}>
                         <GlassRing value={received} max={budget || received || 1} size={80} color="#69F0AE" />
-                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 22 }}>{cat.icon}</span>
+                        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>{renderIcon(cat.icon, 22)}</span>
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>{cat.name}</div>
                       <div style={{ fontSize: 10, color: cat.budgetType === 'annual' ? '#FFD740' : 'rgba(255,255,255,0.25)', marginBottom: 6 }}>{cat.budgetType === 'annual' ? '📅 Previsão anual' : '🔁 Previsão mensal'}</div>
@@ -1306,7 +1311,7 @@ export default function FinFlowApp() {
                       return (
                         <div key={inv.id} style={{ marginBottom: 14, padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div><span style={{ fontSize: 16, marginRight: 8 }}>{inv.icon}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{inv.institution}</span><span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>{inv.category}</span></div>
+                            <div><span style={{ marginRight: 8, display: 'inline-flex' }}>{renderIcon(inv.icon, 16)}</span><span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{inv.institution}</span><span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>{inv.category}</span></div>
                             <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: '#00E5FF' }}>{formatBRL(currentVal)}</div>
                           </div>
                           <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
@@ -1325,14 +1330,14 @@ export default function FinFlowApp() {
             {patrimonioTab === 'assets' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                  <button className="btn-primary" onClick={() => setEditModal({ type: 'asset', data: { id: '', name: '', icon: '🏠', value: '', category: '', acquiredDate: today.toISOString().split('T')[0], notes: '' } })}>+ Novo Bem</button>
+                  <button className="btn-primary" onClick={() => setEditModal({ type: 'asset', data: { id: '', name: '', icon: '🏠', value: '', category: '', acquiredDate: todayStr, notes: '' } })}>+ Novo Bem</button>
                 </div>
                 {assets.length === 0 && <div className="glass" style={{ textAlign: 'center', padding: 40 }}><div style={{ fontSize: 48, opacity: 0.3, marginBottom: 12 }}>🏠</div><p style={{ color: 'rgba(255,255,255,0.35)' }}>Nenhum bem cadastrado</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginTop: 8 }}>Adicione imóveis, veículos e outros bens</p></div>}
                 <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16 }}>
                   {assets.map(a => (
                     <div key={a.id} className="glass hoverable" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setEditModal({ type: 'asset', data: a })}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                        <span style={{ fontSize: 32 }}>{a.icon}</span>
+                        {renderIcon(a.icon, 32)}
                         <div><div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>{a.name}</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{a.category}</div></div>
                       </div>
                       <div className="mono" style={{ fontSize: 26, fontWeight: 700, color: '#FFD740', marginBottom: 8 }}>{formatBRL(a.value)}</div>
@@ -1360,7 +1365,7 @@ export default function FinFlowApp() {
                     <div key={inv.id} className="glass" style={{ marginBottom: 16 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <span style={{ fontSize: 28 }}>{inv.icon}</span>
+                          {renderIcon(inv.icon, 28)}
                           <div><div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>{inv.institution}</div><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{inv.category}</div></div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -1438,7 +1443,7 @@ export default function FinFlowApp() {
                 {bankAccounts.length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20 }}>Nenhuma conta cadastrada</p>}
                 {bankAccounts.map(acc => (
                   <div key={acc.id} className="tx-row" style={{ cursor: 'pointer' }} onClick={() => setEditModal({ type: 'bank', data: acc })}>
-                    <span style={{ fontSize: 24 }}>{acc.icon}</span>
+                    {renderIcon(acc.icon, 24)}
                     <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{acc.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Saldo inicial: {formatBRL(acc.initialBalance)}</div></div>
                     <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: acc.balance >= 0 ? '#69F0AE' : '#FF6B9D' }}>{formatBRL(acc.balance)}</div>
                   </div>
@@ -1456,7 +1461,7 @@ export default function FinFlowApp() {
                 {creditCards.length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: 20 }}>Nenhum cartão cadastrado</p>}
                 {creditCards.map(card => (
                   <div key={card.id} className="tx-row" style={{ cursor: 'pointer' }} onClick={() => setEditModal({ type: 'card', data: card })}>
-                    <span style={{ fontSize: 24 }}>{card.icon}</span>
+                    {renderIcon(card.icon, 24)}
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{card.name}</div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{card.brand || ''} · Limite: {formatBRL(card.limit)}</div>
@@ -1483,7 +1488,7 @@ export default function FinFlowApp() {
                     {expenseCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'expense_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 20 }}>{cat.icon}</span>
+                          {renderIcon(cat.icon, 20)}
                           <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : `🔁 ${formatBRL(cat.monthlyBudget)}/mês`}</div></div>
                         </div>
                       </div>
@@ -1500,7 +1505,7 @@ export default function FinFlowApp() {
                     {incomeCats.map(cat => (
                       <div key={cat.id} className="glass hoverable" style={{ padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }} onClick={() => setEditModal({ type: 'income_cat', data: cat })}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 20 }}>{cat.icon}</span>
+                          {renderIcon(cat.icon, 20)}
                           <div><div style={{ fontSize: 13, fontWeight: 600 }}>{cat.name}</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{cat.budgetType === 'annual' ? '📅 Anual variável' : (cat.monthlyBudget ? `🔁 ${formatBRL(cat.monthlyBudget)}/mês` : 'Sem previsão')}</div></div>
                         </div>
                       </div>
@@ -1559,7 +1564,7 @@ export default function FinFlowApp() {
                 {bankAccounts.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>🏦 Contas Bancárias</div>}
                 {bankAccounts.map(acc => (
                   <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: 20 }}>{acc.icon}</span>
+                    {renderIcon(acc.icon, 20)}
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{acc.name}</span>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginRight: 8 }}>Atual: {formatBRL(acc.balance)}</span>
                     <input className="glass-input" type="number" placeholder="Novo saldo" style={{ width: 160 }} onBlur={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) { setBankAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, balance: v } : a)); notify(`${acc.name} atualizado!`); } }} />
@@ -1568,7 +1573,7 @@ export default function FinFlowApp() {
                 {creditCards.length > 0 && <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, marginTop: 20 }}>💳 Cartões de Crédito</div>}
                 {creditCards.map(card => (
                   <div key={card.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: 20 }}>{card.icon}</span>
+                    {renderIcon(card.icon, 20)}
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{card.name}</span>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginRight: 8 }}>Fatura: {formatBRL(card.used || 0)}</span>
                     <input className="glass-input" type="number" placeholder="Valor fatura atual" style={{ width: 160 }} onBlur={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) { setCreditCards(prev => prev.map(c => c.id === card.id ? { ...c, used: v } : c)); notify(`${card.name} atualizado!`); } }} />
@@ -1845,7 +1850,7 @@ export default function FinFlowApp() {
       <nav className="mobile-nav">
         {navItems.slice(0, 6).map(n => (
           <button key={n.id} className={`mobile-nav-item ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
-            <span style={{ fontSize: 18 }}>{n.icon}</span>
+            <GlassIcon icon={n.icon} size={18} color={page === n.id ? '#B24DFF' : 'rgba(255,255,255,0.5)'} />
             <span style={{ fontSize: 9 }}>{n.label}</span>
           </button>
         ))}
