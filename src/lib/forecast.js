@@ -7,6 +7,7 @@ export function computeForecast(transactions, accounts) {
 
   const monthlyData = {};
   transactions.forEach(tx => {
+    if (tx.type === 'transfer' || tx.type === 'card_payment') return; // skip non-income/expense
     const k = tx.date.slice(0, 7);
     if (!monthlyData[k]) monthlyData[k] = { income: 0, expense: 0 };
     if (tx.type === 'income') monthlyData[k].income += tx.amount;

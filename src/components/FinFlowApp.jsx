@@ -113,9 +113,10 @@ export default function FinFlowApp() {
   const [editModal, setEditModal] = useState(null);
   const [patrimonioTab, setPatrimonioTab] = useState('summary');
   const [settingsTab, setSettingsTab] = useState('accounts');
-  const [newTx, setNewTx] = useState({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '' });
+  const [newTx, setNewTx] = useState({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
 
   const fileRef = useRef(null);
+  const galleryRef = useRef(null);
   const importRef = useRef(null);
   const backupRef = useRef(null);
 
@@ -228,12 +229,19 @@ export default function FinFlowApp() {
 
   // ─── TRANSACTION ACTIONS ───
   const addTransaction = useCallback((tx) => {
-    const amt = tx.type === 'expense' ? -Math.abs(tx.amount) : tx.type === 'card_payment' ? -Math.abs(tx.amount) : Math.abs(tx.amount);
+    const amt = tx.type === 'expense' ? -Math.abs(tx.amount) : tx.type === 'card_payment' ? -Math.abs(tx.amount) : tx.type === 'transfer' ? -Math.abs(tx.amount) : Math.abs(tx.amount);
     const t = { ...tx, id: tx.id || genId(), amount: amt };
     setTransactions(prev => [t, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
 
     // Update balances
-    if (tx.type === 'income' && tx.accountId) {
+    if (tx.type === 'transfer' && tx.fromAccountId && tx.toAccountId) {
+      const absAmt = Math.abs(tx.amount);
+      setBankAccounts(prev => prev.map(a => {
+        if (a.id === tx.fromAccountId) return { ...a, balance: a.balance - absAmt };
+        if (a.id === tx.toAccountId) return { ...a, balance: a.balance + absAmt };
+        return a;
+      }));
+    } else if (tx.type === 'income' && tx.accountId) {
       setBankAccounts(prev => prev.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + Math.abs(tx.amount) } : a));
     } else if (tx.type === 'expense' && tx.cardId) {
       setCreditCards(prev => prev.map(c => c.id === tx.cardId ? { ...c, used: (c.used || 0) + Math.abs(tx.amount) } : c));
@@ -245,11 +253,30 @@ export default function FinFlowApp() {
     }
   }, []);
 
+  // Parse amount accepting both "." and ","
+  const parseAmountInput = (str) => {
+    if (!str) return 0;
+    const s = str.toString().trim().replace(/R\$\s*/gi, '').replace(/\s/g, '');
+    // If has comma as decimal separator (Brazilian): 1.234,56 or 123,45
+    if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    return parseFloat(s) || 0;
+  };
+
   const handleAddManual = () => {
     if (!newTx.description || !newTx.amount) return;
-    addTransaction({ ...newTx, amount: parseFloat(newTx.amount) });
+    const parsed = parseAmountInput(newTx.amount);
+    if (parsed === 0) { notify('Valor inválido', 'error'); return; }
+    if (newTx.type === 'transfer') {
+      if (!newTx.fromAccountId || !newTx.toAccountId) { notify('Selecione conta de origem e destino', 'error'); return; }
+      if (newTx.fromAccountId === newTx.toAccountId) { notify('Contas devem ser diferentes', 'error'); return; }
+      const fromAcc = bankAccounts.find(a => a.id === newTx.fromAccountId);
+      const toAcc = bankAccounts.find(a => a.id === newTx.toAccountId);
+      addTransaction({ ...newTx, amount: parsed, description: newTx.description || `Transferência ${fromAcc?.name || ''} → ${toAcc?.name || ''}` });
+    } else {
+      addTransaction({ ...newTx, amount: parsed });
+    }
     notify('"' + newTx.description + '" lançado!');
-    setNewTx({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '' });
+    setNewTx({ description: '', amount: '', category: 'alimentacao', type: 'expense', date: today.toISOString().split('T')[0], accountId: '', cardId: '', fromAccountId: '', toAccountId: '' });
     setShowAddTx(false);
   };
 
@@ -459,20 +486,105 @@ export default function FinFlowApp() {
                 {incomeCats.filter(c => catIncomes[c.id] || getCatBudgetRange(c, periodMonths) > 0).length === 0 && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem dados no período</p>}
               </div>
             </div>
-            {/* Evolution chart */}
+            {/* Evolution chart - Smooth area */}
             <div className="glass" style={{ marginBottom: 24 }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginBottom: 20 }}>Evolução Mensal</h3>
-              <div style={{ display: 'flex', gap: 20 }}>
-                {[{ label: 'Receitas', data: fd.monthlyData.slice(-6).map(([, d]) => d.income), max: fd.avgIncome * 1.4, color: '#69F0AE' },
-                  { label: 'Despesas', data: fd.monthlyData.slice(-6).map(([, d]) => d.expense), max: fd.avgExpense * 1.4, color: '#FF6B9D' }].map((s, si) => (
-                  <div key={si} style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>{s.label}</div>
-                    <div style={{ display: 'flex', alignItems: 'end', gap: 4, height: 90 }}>
-                      {s.data.map((v, i) => (<div key={i} style={{ flex: 1, background: `linear-gradient(180deg,${s.color}${i === s.data.length - 1 ? '' : '66'},${s.color}11)`, height: `${Math.max(8, (v / (s.max || 1)) * 100)}%`, borderRadius: 6, transition: 'height 0.8s cubic-bezier(0.16,1,0.3,1)' }} />))}
+              {(() => {
+                const rawData = fd.monthlyData.slice(-6);
+                if (rawData.length < 2) return <p style={{ color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: 20 }}>Dados insuficientes</p>;
+                const incomeData = rawData.map(([, d]) => d.income);
+                const expenseData = rawData.map(([, d]) => d.expense);
+                const labels = rawData.map(([k]) => { const [y, m] = k.split('-'); const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']; return `${months[parseInt(m)-1]}'${y.slice(2)}`; });
+                const allVals = [...incomeData, ...expenseData];
+                const maxVal = Math.max(...allVals, 1) * 1.15;
+                const W = 480, H = 160, padL = 0, padR = 0, padT = 10, padB = 0;
+                const chartW = W - padL - padR;
+                const chartH = H - padT - padB;
+                const n = rawData.length;
+
+                // Create smooth catmull-rom path
+                const smoothPath = (data) => {
+                  const pts = data.map((v, i) => ({
+                    x: padL + (i / (n - 1)) * chartW,
+                    y: padT + chartH - (v / maxVal) * chartH
+                  }));
+                  if (pts.length < 2) return '';
+                  // Generate smooth curve using cubic bezier
+                  let d = `M ${pts[0].x} ${pts[0].y}`;
+                  for (let i = 0; i < pts.length - 1; i++) {
+                    const p0 = pts[Math.max(0, i - 1)];
+                    const p1 = pts[i];
+                    const p2 = pts[i + 1];
+                    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+                    const tension = 0.35;
+                    const cp1x = p1.x + (p2.x - p0.x) * tension;
+                    const cp1y = p1.y + (p2.y - p0.y) * tension;
+                    const cp2x = p2.x - (p3.x - p1.x) * tension;
+                    const cp2y = p2.y - (p3.y - p1.y) * tension;
+                    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+                  }
+                  return d;
+                };
+
+                const areaPath = (data, color) => {
+                  const line = smoothPath(data);
+                  const lastPt = padL + ((n - 1) / (n - 1)) * chartW;
+                  return `${line} L ${lastPt} ${padT + chartH} L ${padL} ${padT + chartH} Z`;
+                };
+
+                const incomeLine = smoothPath(incomeData);
+                const expenseLine = smoothPath(expenseData);
+                const incomeArea = areaPath(incomeData);
+                const expenseArea = areaPath(expenseData);
+
+                return (
+                  <div>
+                    <svg viewBox={`0 0 ${W} ${H + 30}`} width="100%" style={{ overflow: 'visible' }}>
+                      <defs>
+                        <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#69F0AE" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="#69F0AE" stopOpacity="0.02" />
+                        </linearGradient>
+                        <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#FF6B9D" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="#FF6B9D" stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+                      {/* Grid lines */}
+                      {[0, 0.25, 0.5, 0.75, 1].map((p, i) => (
+                        <line key={i} x1={padL} x2={W - padR} y1={padT + chartH * (1 - p)} y2={padT + chartH * (1 - p)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+                      ))}
+                      {/* Area fills */}
+                      <path d={incomeArea} fill="url(#gradIncome)" />
+                      <path d={expenseArea} fill="url(#gradExpense)" />
+                      {/* Lines */}
+                      <path d={incomeLine} fill="none" stroke="#69F0AE" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={expenseLine} fill="none" stroke="#FF6B9D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      {/* Dots */}
+                      {incomeData.map((v, i) => (
+                        <circle key={`i${i}`} cx={padL + (i / (n - 1)) * chartW} cy={padT + chartH - (v / maxVal) * chartH} r="3" fill="#69F0AE" stroke="#0F1117" strokeWidth="1.5" />
+                      ))}
+                      {expenseData.map((v, i) => (
+                        <circle key={`e${i}`} cx={padL + (i / (n - 1)) * chartW} cy={padT + chartH - (v / maxVal) * chartH} r="3" fill="#FF6B9D" stroke="#0F1117" strokeWidth="1.5" />
+                      ))}
+                      {/* Month labels */}
+                      {labels.map((l, i) => (
+                        <text key={i} x={padL + (i / (n - 1)) * chartW} y={H + 18} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="10" fontFamily="inherit">{l}</text>
+                      ))}
+                    </svg>
+                    <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#69F0AE' }} />
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Receitas</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF6B9D' }} />
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Despesas</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
             {/* Recent transactions */}
             <div className="glass">
@@ -482,12 +594,12 @@ export default function FinFlowApp() {
               </div>
               {periodTx.slice(0, 7).map(tx => { const cat = getCat(tx.category); return (
                 <div key={tx.id} className="tx-row">
-                  <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : cat?.icon || '📦'}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}</div>
                   </div>
-                  <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
+                  <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: tx.type === 'transfer' ? '#B24DFF' : tx.amount >= 0 ? '#69F0AE' : '#FF6B9D' }}>{tx.amount >= 0 ? '+' : ''}{formatBRL(tx.amount)}</div>
                 </div>
               ); })}
               {periodTx.length === 0 && <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.25)', padding: 20 }}>Nenhum lançamento no período</p>}
@@ -506,33 +618,48 @@ export default function FinFlowApp() {
             {showAddTx && (
               <div className="glass" style={{ marginBottom: 24 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Novo Lançamento</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  {[{v:'expense',l:'💸 Despesa'},{v:'income',l:'💰 Receita'},{v:'card_payment',l:'💳 Pagar Fatura'}].map(t=>(
-                    <button key={t.v} onClick={()=>setNewTx({...newTx, type: t.v})} style={{ padding: '10px 14px', borderRadius: 12, border: newTx.type===t.v ? '1px solid #B24DFF':'1px solid rgba(255,255,255,0.08)', background: newTx.type===t.v ? 'rgba(178,77,255,0.12)':'rgba(255,255,255,0.03)', color:'rgba(255,255,255,0.8)', cursor:'pointer', fontSize:13, fontWeight: newTx.type===t.v ? 600:400 }}>{t.l}</button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  {[{v:'expense',l:'💸 Despesa'},{v:'income',l:'💰 Receita'},{v:'transfer',l:'🔄 Transferência'},{v:'card_payment',l:'💳 Pagar Fatura'}].map(t=>(
+                    <button key={t.v} onClick={()=>setNewTx({...newTx, type: t.v})} style={{ padding: '10px 10px', borderRadius: 12, border: newTx.type===t.v ? '1px solid #B24DFF':'1px solid rgba(255,255,255,0.08)', background: newTx.type===t.v ? 'rgba(178,77,255,0.12)':'rgba(255,255,255,0.03)', color:'rgba(255,255,255,0.8)', cursor:'pointer', fontSize:12, fontWeight: newTx.type===t.v ? 600:400 }}>{t.l}</button>
                   ))}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <input className="glass-input" placeholder="Descrição" value={newTx.description} onChange={e => setNewTx({...newTx, description: e.target.value})} />
-                  <input className="glass-input" type="number" placeholder="Valor" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} />
+                  <input className="glass-input" placeholder={newTx.type === 'transfer' ? 'Motivo da transferência' : 'Descrição'} value={newTx.description} onChange={e => setNewTx({...newTx, description: e.target.value})} />
+                  <input className="glass-input" inputMode="decimal" placeholder="Valor (ex: 1.234,56)" value={newTx.amount} onChange={e => setNewTx({...newTx, amount: e.target.value})} />
                   <input className="glass-input" type="date" value={newTx.date} onChange={e => setNewTx({...newTx, date: e.target.value})} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  {newTx.type !== 'card_payment' && (
-                    <select className="glass-input" value={newTx.category} onChange={e => setNewTx({...newTx, category: e.target.value})}>
-                      {newTx.type === 'income' ? incomeCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>)) : expenseCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
-                    </select>
-                  )}
-                  {(newTx.type === 'income' || newTx.type === 'card_payment' || (newTx.type === 'expense' && !newTx.cardId)) && (
-                    <select className="glass-input" value={newTx.accountId} onChange={e => setNewTx({...newTx, accountId: e.target.value})}>
-                      <option value="">Conta bancária...</option>
-                      {bankAccounts.map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name}</option>))}
-                    </select>
-                  )}
-                  {(newTx.type === 'expense' || newTx.type === 'card_payment') && creditCards.length > 0 && (
-                    <select className="glass-input" value={newTx.cardId} onChange={e => setNewTx({...newTx, cardId: e.target.value, accountId: newTx.type === 'expense' ? '' : newTx.accountId})}>
-                      <option value="">{newTx.type === 'card_payment' ? 'Qual cartão?' : 'No cartão? (opcional)'}</option>
-                      {creditCards.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name} (fatura: {formatBRL(c.used||0)})</option>))}
-                    </select>
+                <div style={{ display: 'grid', gridTemplateColumns: newTx.type === 'transfer' ? '1fr 1fr' : '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  {newTx.type === 'transfer' ? (
+                    <>
+                      <select className="glass-input" value={newTx.fromAccountId} onChange={e => setNewTx({...newTx, fromAccountId: e.target.value})}>
+                        <option value="">📤 Conta de origem...</option>
+                        {bankAccounts.map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name} ({formatBRL(a.balance)})</option>))}
+                      </select>
+                      <select className="glass-input" value={newTx.toAccountId} onChange={e => setNewTx({...newTx, toAccountId: e.target.value})}>
+                        <option value="">📥 Conta de destino...</option>
+                        {bankAccounts.filter(a => a.id !== newTx.fromAccountId).map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name} ({formatBRL(a.balance)})</option>))}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      {newTx.type !== 'card_payment' && (
+                        <select className="glass-input" value={newTx.category} onChange={e => setNewTx({...newTx, category: e.target.value})}>
+                          {newTx.type === 'income' ? incomeCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>)) : expenseCats.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name}</option>))}
+                        </select>
+                      )}
+                      {(newTx.type === 'income' || newTx.type === 'card_payment' || (newTx.type === 'expense' && !newTx.cardId)) && (
+                        <select className="glass-input" value={newTx.accountId} onChange={e => setNewTx({...newTx, accountId: e.target.value})}>
+                          <option value="">Conta bancária...</option>
+                          {bankAccounts.map(a => (<option key={a.id} value={a.id}>{a.icon} {a.name}</option>))}
+                        </select>
+                      )}
+                      {(newTx.type === 'expense' || newTx.type === 'card_payment') && creditCards.length > 0 && (
+                        <select className="glass-input" value={newTx.cardId} onChange={e => setNewTx({...newTx, cardId: e.target.value, accountId: newTx.type === 'expense' ? '' : newTx.accountId})}>
+                          <option value="">{newTx.type === 'card_payment' ? 'Qual cartão?' : 'No cartão? (opcional)'}</option>
+                          {creditCards.map(c => (<option key={c.id} value={c.id}>{c.icon} {c.name} (fatura: {formatBRL(c.used||0)})</option>))}
+                        </select>
+                      )}
+                    </>
                   )}
                 </div>
                 <button className="btn-primary" onClick={handleAddManual}>✓ Lançar</button>
@@ -540,7 +667,7 @@ export default function FinFlowApp() {
             )}
             {transactions.map(tx => { const cat = getCat(tx.category); return (
               <div key={tx.id} className="tx-row">
-                <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : cat?.icon || '📦'}</div>
+                <div style={{ width: 40, height: 40, borderRadius: 14, background: 'rgba(178,77,255,0.08)', border: '1px solid rgba(178,77,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{tx.type === 'income' ? '💰' : tx.type === 'card_payment' ? '💳' : tx.type === 'transfer' ? '🔄' : cat?.icon || '📦'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.85)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{new Date(tx.date + 'T12:00:00').toLocaleDateString('pt-BR')} · {cat?.name || tx.category}{tx.accountId ? ` · ${bankAccounts.find(a=>a.id===tx.accountId)?.name||''}` : ''}{tx.cardId ? ` · ${creditCards.find(c=>c.id===tx.cardId)?.name||''}` : ''}</div>
@@ -687,7 +814,11 @@ export default function FinFlowApp() {
                   <button className="btn-primary" onClick={() => setPage('settings')}>⚙ Configurar</button>
                 </div>
               ) : scanning ? (
-                <div style={{ textAlign: 'center' }}><div className="loader" /><p style={{ marginTop: 20, color: 'rgba(255,255,255,0.5)' }}>Analisando recibo com IA...</p></div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="loader" />
+                  <p style={{ marginTop: 20, fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>🤖 Analisando recibo com IA...</p>
+                  <p style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Extraindo dados automaticamente</p>
+                </div>
               ) : scanResult ? (
                 <div style={{ width: '100%' }}>
                   <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, textAlign: 'center' }}>✅ Resultado — Edite se necessário</h3>
@@ -725,10 +856,15 @@ export default function FinFlowApp() {
                   </div>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>
+                <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 56, opacity: 0.3, marginBottom: 16 }}>📸</div>
-                  <p style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 8 }}>Tire uma foto ou selecione</p>
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Cupons fiscais, recibos, notas</p>
+                  <p style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 6 }}>Escanear Recibo</p>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 24 }}>Cupons fiscais, recibos, notas</p>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                    <button className="btn-primary" onClick={() => fileRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>📷 Tirar Foto</button>
+                    <input ref={galleryRef} type="file" accept="image/*" onChange={handlePhotoCapture} style={{ display: 'none' }} />
+                    <button className="btn-secondary" onClick={() => galleryRef.current?.click()} style={{ padding: '12px 24px', fontSize: 14 }}>🖼 Selecionar Imagem</button>
+                  </div>
                 </div>
               )}
             </div>
